@@ -60,30 +60,30 @@ export function BankNoteReceipt({ transaction, compact = false }: BankNoteReceip
 
   return (
     <div className="w-full max-w-xl mx-auto print-only-receipt">
-      {/* Credential Outer Shell — Single Refined Enclosure */}
-      <div className="relative rounded-3xl bg-white border border-black/[0.08] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.06)] overflow-hidden transition-all">
-        {/* Subtle Decorative Security Guilloche Micro-Strip */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-[#064E3B] via-[#10B981] to-[#064E3B]" />
+      {/* Credential Outer Shell — Sovereign Banknote Enclosure */}
+      <div className="relative rounded-3xl bg-white border border-[#C5A059]/40 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.08)] overflow-hidden transition-all">
+        {/* Decorative Security Guilloche Micro-Strip (Gold to Emerald) */}
+        <div className="h-2 w-full bg-gradient-to-r from-[#04241B] via-[#C5A059] to-[#04241B]" />
 
         {/* Credential Header */}
-        <div className="px-7 pt-7 pb-5 border-b border-black/[0.06] flex items-start justify-between gap-4">
+        <div className="px-7 pt-7 pb-5 border-b border-black/[0.06] flex items-start justify-between gap-4 bg-gradient-to-b from-[#FDFDFC] to-white">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-              <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#525856]">
+              <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-pulse" />
+              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#53645E]">
                 Covenant University · CMSS
               </p>
             </div>
-            <h2 className="text-lg md:text-xl font-bold tracking-tight text-[#0A0D0C]">
+            <h2 className="font-serif-title text-xl md:text-2xl font-bold tracking-tight text-[#09120E]">
               Department of Banking &amp; Finance
             </h2>
-            <p className="text-xs text-[#525856]">
-              Official Financial Clearance Certificate · FINSA
+            <p className="text-xs text-[#53645E]">
+              Official Financial Clearance Credential · FINSA Treasury
             </p>
           </div>
 
           <div className="shrink-0 text-right">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#064E3B]/[0.08] border border-[#064E3B]/20 text-[#064E3B] text-[11px] font-mono font-medium">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-[#C5A059] to-[#D4AF37] text-[#04241B] text-[11px] font-mono font-bold shadow-xs">
               <SealCheck size={14} weight="fill" />
               VERIFIED
             </span>
@@ -199,9 +199,9 @@ export function BankNoteReceipt({ transaction, compact = false }: BankNoteReceip
             <button
               type="button"
               onClick={handlePrintPdf}
-              className="inline-flex items-center gap-2 rounded-full bg-[#0A0D0C] text-white px-5 py-2.5 text-xs font-medium transition-transform duration-150 active:scale-[0.97] hover:bg-[#064E3B] cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-full bg-[#04241B] text-[#E5C378] px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider transition-all duration-150 active:scale-[0.97] hover:bg-[#063A2D] cursor-pointer shadow-sm"
             >
-              <Printer size={15} weight="regular" />
+              <Printer size={15} weight="bold" />
               <span>Download / Print Credential</span>
             </button>
 

@@ -35,7 +35,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-[100dvh] bg-[#F7F7F4] text-[#0A0D0C] font-sans selection:bg-[#064E3B] selection:text-white antialiased relative">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        />
+      </head>
+      <body className="min-h-[100dvh] bg-[#F8F9FA] text-[#09120E] font-sans selection:bg-[#04241B] selection:text-[#E5C378] antialiased relative">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

@@ -1,0 +1,16 @@
+{
+  "name": "FINSA Online · Department of Banking & Finance",
+  "short_name": "FINSA Online",
+  "description": "Departmental Course Dues & Financial Clearance Portal, Covenant University",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F7F4",
+  "theme_color": "#064E3B",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

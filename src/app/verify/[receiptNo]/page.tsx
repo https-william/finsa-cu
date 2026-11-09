@@ -45,17 +45,17 @@ export default function VerifyReceiptPage() {
     <div className="min-h-[100dvh] flex flex-col justify-between bg-[#FAFAFC] text-[#0A0D0C]">
       {/* Top Bar */}
       <header className="no-print pt-4 px-4">
-        <div className="max-w-xl mx-auto h-14 px-5 rounded-full bg-white/80 backdrop-blur-xl border border-black/[0.06] flex items-center justify-between shadow-xs">
+        <div className="max-w-xl mx-auto h-14 px-5 rounded-full bg-white/90 backdrop-blur-xl border border-black/[0.08] flex items-center justify-between shadow-xs">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono text-[#525856] hover:text-[#0A0D0C] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-mono text-[#53645E] hover:text-[#09120E] transition-colors"
           >
             <ArrowLeft size={14} />
             <span>Student Portal</span>
           </Link>
-          <div className="flex items-center gap-1.5 text-xs font-mono text-[#717875]">
+          <div className="flex items-center gap-1.5 text-xs font-mono text-[#53645E]">
             <Buildings size={15} className="text-[#064E3B]" />
-            <span>Clearance Verification</span>
+            <span className="font-semibold text-[#09120E]">FINSA Clearance Terminal</span>
           </div>
         </div>
       </header>
@@ -84,7 +84,7 @@ export default function VerifyReceiptPage() {
             </div>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-[#0A0D0C] text-white text-xs font-mono uppercase tracking-wider hover:bg-[#064E3B] transition-transform duration-150 active:scale-[0.97] cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-[#04241B] text-[#E5C378] text-xs font-mono uppercase tracking-wider font-bold hover:bg-[#064E3B] transition-transform duration-150 active:scale-[0.97] cursor-pointer"
             >
               Verify
             </button>
@@ -94,23 +94,23 @@ export default function VerifyReceiptPage() {
         {/* Verification Status Banner */}
         {checked && matchedTx && matchedTx.status === 'success' && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="no-print p-5 rounded-2xl bg-[#064E3B] text-white flex items-center justify-between gap-4 shadow-sm">
+            <div className="no-print p-6 rounded-3xl bg-gradient-to-r from-[#04241B] to-[#063A2D] border border-[#C5A059]/40 text-white flex items-center justify-between gap-4 shadow-lg">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-400/20 flex items-center justify-center shrink-0">
-                  <ShieldCheck size={24} weight="fill" className="text-emerald-300" />
+                <div className="w-12 h-12 rounded-2xl bg-[#C5A059]/20 border border-[#C5A059]/30 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={28} weight="fill" className="text-[#E5C378]" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-200 block">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[#E5C378] block font-bold">
                     Authentic Credential
                   </span>
-                  <h1 className="text-base sm:text-lg font-bold tracking-tight">
+                  <h1 className="font-serif-title text-lg sm:text-xl font-bold tracking-tight text-white">
                     FINANCIALLY CLEARED
                   </h1>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-[10px] font-mono text-emerald-200 block">VERIFIED</span>
-                <span className="text-lg font-mono font-bold text-white font-tabular">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5C378] block">VERIFIED</span>
+                <span className="text-xl font-mono font-bold text-white font-tabular">
                   {formatNaira(matchedTx.amountNaira)}
                 </span>
               </div>

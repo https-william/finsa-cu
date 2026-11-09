@@ -294,11 +294,11 @@ export default function AdminDashboardPage() {
               <ArrowLeft size={15} />
             </Link>
             <div>
-              <span className="font-semibold text-sm tracking-tight text-[#0A0D0C] block">
+              <span className="font-serif-title font-bold text-base tracking-tight text-[#09120E] block">
                 FINSA Financial Command Center
               </span>
-              <span className="text-[10px] font-mono text-[#717875] hidden sm:block">
-                Department of Banking &amp; Finance · Master Ledger &amp; Reconciliation
+              <span className="text-[10px] font-mono text-[#53645E] hidden sm:block">
+                Department of Banking &amp; Finance · Master Ledger &amp; Treasury Reconciliation
               </span>
             </div>
           </div>
@@ -494,21 +494,21 @@ export default function AdminDashboardPage() {
         {/* 4-Card Executive Metrics Grid (Apple-grade surface cards) */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
           {/* Card 1 (4 cols): Total Verified Revenue */}
-          <div className="lg:col-span-4 rounded-3xl bg-[#064E3B] text-white border border-emerald-950 p-6 shadow-[0_8px_24px_-6px_rgba(6,78,59,0.25)] flex flex-col justify-between">
+          <div className="lg:col-span-4 rounded-3xl bg-gradient-to-br from-[#04241B] to-[#063A2D] text-white border border-[#C5A059]/40 p-6 shadow-[0_10px_30px_rgba(4,36,27,0.3)] flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-200">
-                Verified Collections
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[#E5C378] font-bold">
+                Verified Treasury Collections
               </span>
-              <CurrencyNgn size={20} className="text-emerald-300" />
+              <CurrencyNgn size={22} className="text-[#E5C378]" />
             </div>
             <div className="my-3">
               <p className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-white font-tabular">
                 {mounted ? formatNaira(metrics.totalRevenue) : '₦0'}
               </p>
             </div>
-            <div className="flex items-center justify-between text-xs font-mono text-emerald-100/90 pt-3 border-t border-white/15">
+            <div className="flex items-center justify-between text-xs font-mono text-emerald-100/90 pt-3 border-t border-[#C5A059]/20">
               <span>Regular (₦{(feeConfig.regularAmountNaira / 1000)}k): {metrics.regularPaidCount}</span>
-              <span>Exec (₦{(feeConfig.executiveAmountNaira / 1000)}k): {metrics.execPaidCount}</span>
+              <span className="text-[#E5C378]">Exec (₦{(feeConfig.executiveAmountNaira / 1000)}k): {metrics.execPaidCount}</span>
             </div>
           </div>
 
