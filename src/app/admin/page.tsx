@@ -18,10 +18,18 @@ import {
   ArrowUpRight,
   ListChecks,
   WarningCircle,
-  CaretDown,
+  Plus,
+  PencilSimple,
+  Trash,
+  ArrowsCounterClockwise,
+  Student,
+  Sparkle,
+  IdentificationCard,
+  Funnel,
 } from '@phosphor-icons/react';
 import {
   AcademicLevel,
+  StudentRoleType,
   TransactionRecord,
   StudentRecord,
   FeeConfig,
@@ -34,9 +42,17 @@ import {
   getAuditLogs,
   approveBankTransfer,
   rejectBankTransfer,
+  createBackofficeStudent,
+  updateBackofficeStudent,
+  deleteBackofficeStudent,
+  manualClearStudent,
+  resetStudentsToRosterSeed,
   formatNaira,
   normalizeMatric,
 } from '@/lib/ledger-store';
+import { CovenantLaurelShieldArt, AppleLuminousAura } from '@/components/LineArtElements';
+
+const LEVELS: AcademicLevel[] = ['100L', '200L', '300L', '400L', 'Postgrad'];
 
 function formatDeterministicTime(iso: string): string {
   const d = new Date(iso);
@@ -53,14 +69,39 @@ export default function AdminDashboardPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [levelFilter, setLevelFilter] = useState<string>('ALL');
-  const [roleFilter, setRoleFilter] = useState<string>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // Active Admin View Tab: 'roster' | 'transactions' | 'settings' | 'audit'
+  const [activeTab, setActiveTab] = useState<'roster' | 'transactions' | 'settings' | 'audit'>('roster');
 
-  // Fee Settings Form State
-  const [showSettings, setShowSettings] = useState(false);
+  // Notification Toast Banner
+  const [actionFeedback, setActionFeedback] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+
+  // --- ROSTER BACK OFFICE STATE ---
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterLevelFilter, setRosterLevelFilter] = useState<string>('ALL');
+  const [rosterCourseFilter, setRosterCourseFilter] = useState<string>('ALL');
+  const [rosterStatusFilter, setRosterStatusFilter] = useState<string>('ALL');
+
+  // Modals for Student Management
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
+
+  // New Student Form State
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentMatric, setNewStudentMatric] = useState('');
+  const [newStudentRegNo, setNewStudentRegNo] = useState('');
+  const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [newStudentLevel, setNewStudentLevel] = useState<AcademicLevel>('100L');
+  const [newStudentCourse, setNewStudentCourse] = useState('FinTech');
+  const [newStudentRole, setNewStudentRole] = useState<StudentRoleType>('regular');
+  const [newStudentExecTitle, setNewStudentExecTitle] = useState('');
+  const [formError, setFormError] = useState('');
+
+  // --- TRANSACTIONS LEDGER STATE ---
+  const [txSearch, setTxSearch] = useState('');
+  const [txLevelFilter, setTxLevelFilter] = useState<string>('ALL');
+  const [txStatusFilter, setTxStatusFilter] = useState<string>('ALL');
+
+  // --- FEE SETTINGS STATE ---
   const [regInput, setRegInput] = useState(10000);
   const [execInput, setExecInput] = useState(15000);
   const [bankNameInput, setBankNameInput] = useState('');
@@ -68,7 +109,6 @@ export default function AdminDashboardPage() {
   const [acctNameInput, setAcctNameInput] = useState('');
   const [paystackEnabled, setPaystackEnabled] = useState(true);
   const [transferEnabled, setTransferEnabled] = useState(true);
-  const [savedBanner, setSavedBanner] = useState('');
 
   const refreshData = () => {
     const cfg = getFeeConfig();
@@ -91,55 +131,62 @@ export default function AdminDashboardPage() {
     setMounted(true);
   }, []);
 
-  // Metrics Calculation
-  const metrics = useMemo(() => {
+  const triggerToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setActionFeedback({ message, type });
+    setTimeout(() => setActionFeedback(null), 4000);
+  };
+
+  // Student Clearance Lookup Mapping
+  const clearanceStatusMap = useMemo(() => {
+    const map = new Map<string, { status: 'cleared' | 'pending' | 'unpaid'; transaction?: TransactionRecord }>();
     const paidTxs = transactions.filter((t) => t.status === 'success');
     const pendingTxs = transactions.filter((t) => t.status === 'pending_verification');
 
-    const totalRevenue = paidTxs.reduce((acc, t) => acc + t.amountNaira, 0);
-    const regularPaidCount = paidTxs.filter((t) => t.roleType === 'regular').length;
-    const execPaidCount = paidTxs.filter((t) => t.roleType === 'executive').length;
-
-    const paidMatrics = new Set(paidTxs.map((t) => normalizeMatric(t.matricNumber)));
-    const outstandingStudents = students.filter(
-      (s) => !paidMatrics.has(normalizeMatric(s.matricNumber))
-    );
-
-    const byLevel: Record<AcademicLevel, { paid: number; total: number; revenue: number }> = {
-      '100L': { paid: 0, total: 0, revenue: 0 },
-      '200L': { paid: 0, total: 0, revenue: 0 },
-      '300L': { paid: 0, total: 0, revenue: 0 },
-      '400L': { paid: 0, total: 0, revenue: 0 },
-      Postgrad: { paid: 0, total: 0, revenue: 0 },
-    };
-
-    students.forEach((s) => {
-      if (byLevel[s.level]) byLevel[s.level].total += 1;
+    paidTxs.forEach((t) => {
+      map.set(normalizeMatric(t.matricNumber), { status: 'cleared', transaction: t });
     });
 
-    paidTxs.forEach((t) => {
-      if (byLevel[t.level]) {
-        byLevel[t.level].paid += 1;
-        byLevel[t.level].revenue += t.amountNaira;
+    pendingTxs.forEach((t) => {
+      if (!map.has(normalizeMatric(t.matricNumber))) {
+        map.set(normalizeMatric(t.matricNumber), { status: 'pending', transaction: t });
       }
     });
 
-    return {
-      totalRevenue,
-      paidCount: paidTxs.length,
-      regularPaidCount,
-      execPaidCount,
-      pendingCount: pendingTxs.length,
-      outstandingCount: outstandingStudents.length,
-      outstandingStudents,
-      byLevel,
-    };
-  }, [transactions, students]);
+    return map;
+  }, [transactions]);
+
+  // Back Office Filtered Students
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const q = rosterSearch.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        s.fullName.toLowerCase().includes(q) ||
+        s.matricNumber.toLowerCase().includes(q) ||
+        (s.regNo && s.regNo.toLowerCase().includes(q)) ||
+        s.email.toLowerCase().includes(q) ||
+        (s.course && s.course.toLowerCase().includes(q));
+
+      const matchesLevel = rosterLevelFilter === 'ALL' || s.level === rosterLevelFilter;
+      const matchesCourse =
+        rosterCourseFilter === 'ALL' ||
+        (s.course && s.course.toLowerCase() === rosterCourseFilter.toLowerCase());
+
+      const clearance = clearanceStatusMap.get(normalizeMatric(s.matricNumber))?.status || 'unpaid';
+      const matchesStatus =
+        rosterStatusFilter === 'ALL' ||
+        (rosterStatusFilter === 'CLEARED' && clearance === 'cleared') ||
+        (rosterStatusFilter === 'UNPAID' && clearance === 'unpaid') ||
+        (rosterStatusFilter === 'PENDING' && clearance === 'pending');
+
+      return matchesSearch && matchesLevel && matchesCourse && matchesStatus;
+    });
+  }, [students, rosterSearch, rosterLevelFilter, rosterCourseFilter, rosterStatusFilter, clearanceStatusMap]);
 
   // Filtered Transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
-      const q = searchQuery.trim().toLowerCase();
+      const q = txSearch.trim().toLowerCase();
       const matchesSearch =
         !q ||
         t.studentName.toLowerCase().includes(q) ||
@@ -147,19 +194,164 @@ export default function AdminDashboardPage() {
         t.reference.toLowerCase().includes(q) ||
         (t.receiptNumber && t.receiptNumber.toLowerCase().includes(q));
 
-      const matchesLevel = levelFilter === 'ALL' || t.level === levelFilter;
-      const matchesRole = roleFilter === 'ALL' || t.roleType === roleFilter;
-      const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
+      const matchesLevel = txLevelFilter === 'ALL' || t.level === txLevelFilter;
+      const matchesStatus = txStatusFilter === 'ALL' || t.status === txStatusFilter;
 
-      return matchesSearch && matchesLevel && matchesRole && matchesStatus;
+      return matchesSearch && matchesLevel && matchesStatus;
     });
-  }, [transactions, searchQuery, levelFilter, roleFilter, statusFilter]);
+  }, [transactions, txSearch, txLevelFilter, txStatusFilter]);
 
-  const handleSaveFeeSettings = (e: React.FormEvent) => {
+  // Aggregate Metrics
+  const metrics = useMemo(() => {
+    const totalStudents = students.length;
+    let clearedCount = 0;
+    let pendingCount = 0;
+    let financeCount = 0;
+    let fintechCount = 0;
+
+    students.forEach((s) => {
+      const c = clearanceStatusMap.get(normalizeMatric(s.matricNumber))?.status;
+      if (c === 'cleared') clearedCount += 1;
+      else if (c === 'pending') pendingCount += 1;
+
+      const crs = (s.course || '').toLowerCase();
+      if (crs.includes('fintech')) fintechCount += 1;
+      else financeCount += 1;
+    });
+
+    const unpaidCount = totalStudents - clearedCount - pendingCount;
+    const paidTxs = transactions.filter((t) => t.status === 'success');
+    const totalRevenue = paidTxs.reduce((sum, t) => sum + t.amountNaira, 0);
+
+    return {
+      totalStudents,
+      clearedCount,
+      pendingCount,
+      unpaidCount,
+      financeCount,
+      fintechCount,
+      totalRevenue,
+      clearancePercentage: totalStudents > 0 ? Math.round((clearedCount / totalStudents) * 100) : 0,
+    };
+  }, [students, transactions, clearanceStatusMap]);
+
+  // --- ACTIONS: STUDENT LOG CRUD ---
+  const handleCreateStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+
+    if (newStudentName.trim().length < 3) {
+      setFormError('Please enter the full legal name of the student.');
+      return;
+    }
+    if (newStudentMatric.trim().length < 5) {
+      setFormError('Please enter a valid matriculation number (e.g. 25AG032080).');
+      return;
+    }
+    const emailToUse = newStudentEmail.trim() || `${normalizeMatric(newStudentMatric).toLowerCase()}@stu.cu.edu.ng`;
+
+    createBackofficeStudent({
+      fullName: newStudentName,
+      matricNumber: newStudentMatric,
+      regNo: newStudentRegNo || undefined,
+      email: emailToUse,
+      level: newStudentLevel,
+      course: newStudentCourse,
+      roleType: newStudentRole,
+      executiveTitle: newStudentRole === 'executive' ? newStudentExecTitle : undefined,
+    });
+
+    refreshData();
+    setIsAddModalOpen(false);
+    resetNewStudentForm();
+    triggerToast(`Enrolled student ${newStudentName} into official registry.`);
+  };
+
+  const handleUpdateStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+
+    updateBackofficeStudent(editingStudent.id, {
+      fullName: editingStudent.fullName,
+      matricNumber: editingStudent.matricNumber,
+      regNo: editingStudent.regNo,
+      email: editingStudent.email,
+      level: editingStudent.level,
+      course: editingStudent.course,
+      roleType: editingStudent.roleType,
+      executiveTitle: editingStudent.roleType === 'executive' ? editingStudent.executiveTitle : undefined,
+    });
+
+    refreshData();
+    setEditingStudent(null);
+    triggerToast(`Saved changes for ${editingStudent.fullName}.`);
+  };
+
+  const handleDeleteStudent = (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to remove ${name} from the back office registry?`)) {
+      deleteBackofficeStudent(id);
+      refreshData();
+      triggerToast(`Archived ${name} from the student registry.`, 'info');
+    }
+  };
+
+  const handleManualClear = (studentId: string, studentName: string) => {
+    const tx = manualClearStudent(studentId);
+    if (tx) {
+      refreshData();
+      triggerToast(`Official clearance credential ${tx.receiptNumber} generated for ${studentName}!`);
+    }
+  };
+
+  const handleResetToSeed = () => {
+    if (
+      window.confirm(
+        'Restore the official university roster seed? This restores all 150+ original Finance and FinTech student profiles.'
+      )
+    ) {
+      resetStudentsToRosterSeed();
+      refreshData();
+      triggerToast('Restored official departmental student registry seed.');
+    }
+  };
+
+  const resetNewStudentForm = () => {
+    setNewStudentName('');
+    setNewStudentMatric('');
+    setNewStudentRegNo('');
+    setNewStudentEmail('');
+    setNewStudentLevel('100L');
+    setNewStudentCourse('FinTech');
+    setNewStudentRole('regular');
+    setNewStudentExecTitle('');
+    setFormError('');
+  };
+
+  // --- ACTIONS: TRANSACTIONS APPROVAL ---
+  const handleApprove = (txId: string) => {
+    const res = approveBankTransfer(txId, 'Financial Secretary');
+    if (res) {
+      refreshData();
+      triggerToast(`Transfer verified! Credential ${res.receiptNumber} issued to ${res.matricNumber}.`);
+    }
+  };
+
+  const handleReject = (txId: string) => {
+    if (window.confirm('Are you sure you want to decline this transfer claim?')) {
+      const res = rejectBankTransfer(txId, 'Financial Secretary');
+      if (res) {
+        refreshData();
+        triggerToast(`Transfer claim declined for ${res.matricNumber}.`, 'error');
+      }
+    }
+  };
+
+  // --- ACTIONS: FEE SETTINGS ---
+  const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     updateFeeConfig({
-      regularAmountNaira: Number(regInput) || 10000,
-      executiveAmountNaira: Number(execInput) || 15000,
+      regularAmountNaira: Number(regInput),
+      executiveAmountNaira: Number(execInput),
       departmentalBankName: bankNameInput,
       departmentalAccountNumber: acctNoInput,
       departmentalAccountName: acctNameInput,
@@ -167,733 +359,1251 @@ export default function AdminDashboardPage() {
       enableBankTransferRail: transferEnabled,
     });
     refreshData();
-    setShowSettings(false);
-    setSavedBanner('Fee policy updated across the portal (Regular: ₦' + Number(regInput).toLocaleString() + ', Exec: ₦' + Number(execInput).toLocaleString() + ').');
-    setTimeout(() => setSavedBanner(''), 4000);
+    triggerToast('Treasury fee schedule and payment rails updated.');
   };
 
-  const handleApproveTransfer = (txId: string) => {
-    approveBankTransfer(txId, 'FINSA Financial Secretary');
-    refreshData();
-  };
+  // --- CSV EXPORT ENGINE ---
+  const exportRosterCSV = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const headers = [
+      'Full Legal Name',
+      'Matriculation Number',
+      'Registration Number',
+      'Academic Level',
+      'Departmental Track',
+      'Role Classification',
+      'Executive Portfolio',
+      'Clearance Status',
+      'Official Receipt Number',
+      'University Email',
+    ];
 
-  const handleRejectTransfer = (txId: string) => {
-    rejectBankTransfer(txId, 'FINSA Financial Secretary');
-    refreshData();
-  };
-
-  // Excel-Compatible CSV Export Engine
-  const downloadSpreadsheet = (mode: 'verified_only' | 'all_attempts' | 'outstanding_roster' | 'by_level') => {
-    const today = new Date().toISOString().slice(0, 10);
-    let filename = `FINSA_Clearance_Export_${today}.csv`;
-    let headers: string[] = [];
-    let rows: string[][] = [];
-
-    if (mode === 'outstanding_roster') {
-      filename = `FINSA_Outstanding_Defaulters_${today}.csv`;
-      headers = [
-        'Matric Number',
-        'Student Full Name',
-        'Level',
-        'Classification',
-        'Executive Portfolio',
-        'Expected Amount (NGN)',
-        'Email Address',
-      ];
-      rows = metrics.outstandingStudents.map((s) => [
-        s.matricNumber,
+    const rows = filteredStudents.map((s) => {
+      const cl = clearanceStatusMap.get(normalizeMatric(s.matricNumber));
+      return [
         s.fullName,
+        s.matricNumber,
+        s.regNo || 'N/A',
         s.level,
+        s.course || 'Finance',
         s.roleType.toUpperCase(),
-        s.executiveTitle || 'N/A',
-        String(
-          s.roleType === 'executive'
-            ? feeConfig.executiveAmountNaira
-            : feeConfig.regularAmountNaira
-        ),
+        s.executiveTitle || '-',
+        cl?.status.toUpperCase() || 'UNPAID',
+        cl?.transaction?.receiptNumber || 'UNISSUED',
         s.email,
-      ]);
-    } else {
-      let source = filteredTransactions;
-      if (mode === 'verified_only' || mode === 'by_level') {
-        source = transactions.filter((t) => t.status === 'success');
-      }
-      if (mode === 'by_level') {
-        filename = `FINSA_Clearance_Master_By_Level_${today}.csv`;
-        source = [...source].sort((a, b) =>
-          a.level === b.level
-            ? a.matricNumber.localeCompare(b.matricNumber)
-            : a.level.localeCompare(b.level)
-        );
-      } else if (mode === 'verified_only') {
-        filename = `FINSA_Verified_Paid_Students_${today}.csv`;
-      } else {
-        filename = `FINSA_All_Transaction_Records_${today}.csv`;
-      }
-
-      headers = [
-        'Receipt Number',
-        'Matric Number',
-        'Student Full Name',
-        'Academic Level',
-        'Classification',
-        'Executive Portfolio',
-        'Amount Paid (NGN)',
-        'Status',
-        'Payment Rail',
-        'Gateway / Transfer Ref',
-        'Verified Timestamp',
       ];
-
-      rows = source.map((t) => [
-        t.receiptNumber || 'UNISSUED',
-        t.matricNumber,
-        t.studentName,
-        t.level,
-        t.roleType === 'executive' ? 'EXECUTIVE' : 'REGULAR',
-        t.executiveTitle || '-',
-        String(t.amountNaira),
-        t.status.toUpperCase(),
-        t.paymentRail.toUpperCase(),
-        t.reference,
-        t.verifiedAt || t.createdAt,
-      ]);
-    }
+    });
 
     const escapeCsv = (val: string) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-    const csvContent = [
-      headers.map(escapeCsv).join(','),
-      ...rows.map((r) => r.map(escapeCsv).join(',')),
-    ].join('\n');
+    const csvContent = [headers.map(escapeCsv).join(','), ...rows.map((r) => r.map(escapeCsv).join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', filename);
+    link.setAttribute('download', `FINSA_Student_Roster_Log_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    triggerToast(`Exported ${filteredStudents.length} student records to CSV.`);
   };
 
+  if (!mounted) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-[#FAFAFA] text-zinc-400">
+        <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-between bg-[#FAFAFA] text-[#09090B]">
-      {/* Precision Navbar */}
-      <header className="border-b border-zinc-200 bg-white sticky top-0 z-40">
+    <div className="min-h-[100dvh] relative flex flex-col justify-between bg-[#FAFAFA] text-[#09090B]">
+      {/* Apple-grade Luminous Ambient Depth */}
+      <AppleLuminousAura />
+
+      {/* Precision Admin Navigation Bar */}
+      <header className="border-b border-black/[0.06] bg-white/80 backdrop-blur-md sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto h-14 px-4 sm:px-6 flex items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="p-1.5 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition-colors"
+              className="p-1.5 rounded-lg border border-zinc-200/90 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 transition-colors active:scale-[0.98]"
               title="Return to Student Portal"
             >
               <ArrowLeft size={15} />
             </Link>
-            <div>
-              <span className="font-semibold text-sm tracking-tight text-zinc-950 block">
-                FINSA Administration &amp; Reconciliation
-              </span>
-              <span className="text-[11px] text-zinc-500 hidden sm:block">
-                Department of Banking &amp; Finance · Master Ledger &amp; Fee Management
-              </span>
+            <div className="flex items-center gap-2">
+              <CovenantLaurelShieldArt className="w-5 h-5 text-zinc-900" />
+              <div>
+                <span className="font-semibold text-sm tracking-tight text-zinc-950 block">
+                  FINSA Back Office &amp; Administration
+                </span>
+                <span className="text-[11px] text-zinc-500 hidden sm:block">
+                  Department of Banking &amp; Finance · Master Student Registry &amp; Ledger
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSettings((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                showSettings
-                  ? 'bg-zinc-900 text-white border-zinc-900'
-                  : 'bg-white text-zinc-800 border-zinc-200 hover:bg-zinc-50'
-              }`}
-            >
-              <SlidersHorizontal size={14} />
-              <span className="hidden sm:inline">Fee Settings</span>
-              <span className="sm:hidden">Fees</span>
-              <span className="text-[11px] font-mono text-zinc-400">
-                (₦{(feeConfig.regularAmountNaira / 1000)}k/₦{(feeConfig.executiveAmountNaira / 1000)}k)
-              </span>
-            </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-mono text-[11px] border border-blue-200/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+              <span>Session {feeConfig.academicSession}</span>
+            </span>
 
-            <button
-              type="button"
-              onClick={() => downloadSpreadsheet('by_level')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-950 text-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-800 transition-colors cursor-pointer"
+            <Link
+              href="/"
+              className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-white font-medium text-xs transition-all active:scale-[0.98]"
             >
-              <DownloadSimple size={14} />
-              <span className="hidden sm:inline">Export Master (.CSV)</span>
-              <span className="sm:hidden">Export</span>
-            </button>
+              Student Portal →
+            </Link>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl w-full mx-auto px-4 pt-6 pb-20 space-y-6">
-        {/* Toast / Notification Banner */}
-        {savedBanner && (
-          <div className="p-3.5 rounded-2xl bg-[#064E3B] text-white text-xs font-medium flex items-center justify-between shadow-sm animate-in fade-in duration-150">
-            <div className="flex items-center gap-2">
-              <CheckCircle size={16} weight="fill" className="text-emerald-300 shrink-0" />
-              <span>{savedBanner}</span>
+      {/* Floating Action Feedback Toast */}
+      {actionFeedback && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div
+            className={`px-4 py-2.5 rounded-xl shadow-lg border text-xs font-medium flex items-center gap-2 ${
+              actionFeedback.type === 'success'
+                ? 'bg-emerald-950 text-emerald-100 border-emerald-800'
+                : actionFeedback.type === 'error'
+                ? 'bg-red-950 text-red-100 border-red-800'
+                : 'bg-zinc-900 text-zinc-100 border-zinc-700'
+            }`}
+          >
+            {actionFeedback.type === 'success' && <CheckCircle size={16} weight="fill" className="text-emerald-400" />}
+            {actionFeedback.type === 'error' && <XCircle size={16} weight="fill" className="text-red-400" />}
+            {actionFeedback.type === 'info' && <WarningCircle size={16} weight="fill" className="text-blue-400" />}
+            <span>{actionFeedback.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main Administrative Container */}
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 flex-1">
+        {/* Top Operational Metrics Ribbon (4-Card Grid) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Card 1: Total Enrolled */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/90 backdrop-blur-md border border-black/[0.07] shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-zinc-400">
+              <span className="text-[11px] font-mono uppercase tracking-wider">Enrolled Scholars</span>
+              <Users size={18} className="text-blue-600" />
             </div>
-            <button
-              type="button"
-              onClick={() => setSavedBanner('')}
-              className="text-[11px] font-mono text-emerald-200 hover:text-white underline cursor-pointer"
-            >
-              Dismiss
-            </button>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-zinc-950 font-tabular">
+                {metrics.totalStudents}
+              </span>
+              <span className="text-[11px] text-zinc-500 font-medium">
+                ({metrics.fintechCount} FinTech · {metrics.financeCount} Fin)
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400">Verified departmental roster</p>
+          </div>
+
+          {/* Card 2: Cleared Count & Rate */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/90 backdrop-blur-md border border-black/[0.07] shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-zinc-400">
+              <span className="text-[11px] font-mono uppercase tracking-wider">Cleared Students</span>
+              <CheckCircle size={18} className="text-emerald-600" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-emerald-700 font-tabular">
+                {metrics.clearedCount}
+              </span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-mono font-medium">
+                {metrics.clearancePercentage}% cleared
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400">Official certificates issued</p>
+          </div>
+
+          {/* Card 3: Defaulters / Outstanding */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/90 backdrop-blur-md border border-black/[0.07] shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-zinc-400">
+              <span className="text-[11px] font-mono uppercase tracking-wider">Uncleared Dues</span>
+              <Clock size={18} className="text-amber-600" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-zinc-950 font-tabular">
+                {metrics.unpaidCount}
+              </span>
+              {metrics.pendingCount > 0 && (
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-mono">
+                  {metrics.pendingCount} pending review
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-zinc-400">Pending session fee clearance</p>
+          </div>
+
+          {/* Card 4: Total Revenue Collected */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/90 backdrop-blur-md border border-black/[0.07] shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-zinc-400">
+              <span className="text-[11px] font-mono uppercase tracking-wider">Total Treasury Inflow</span>
+              <CurrencyNgn size={18} className="text-zinc-900" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-zinc-950 font-tabular">
+                {formatNaira(metrics.totalRevenue)}
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400">Session {feeConfig.academicSession} receipts</p>
+          </div>
+        </div>
+
+        {/* Master Navigation Tabs */}
+        <div className="flex items-center gap-1 sm:gap-2 border-b border-black/[0.07] pb-1 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab('roster')}
+            className={`pb-2.5 px-3 sm:px-4 text-xs font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
+              activeTab === 'roster' ? 'text-zinc-950 font-semibold' : 'text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <span>Student Registry &amp; Roster Log</span>
+            <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-600 font-mono text-[10px]">
+              {students.length}
+            </span>
+            {activeTab === 'roster' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-950 rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('transactions')}
+            className={`pb-2.5 px-3 sm:px-4 text-xs font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
+              activeTab === 'transactions' ? 'text-zinc-950 font-semibold' : 'text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <span>Transactions &amp; Claims</span>
+            {metrics.pendingCount > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-mono text-[10px] font-semibold animate-pulse">
+                {metrics.pendingCount}
+              </span>
+            )}
+            {activeTab === 'transactions' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-950 rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`pb-2.5 px-3 sm:px-4 text-xs font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
+              activeTab === 'settings' ? 'text-zinc-950 font-semibold' : 'text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <span>Treasury &amp; Fee Rules</span>
+            {activeTab === 'settings' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-950 rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('audit')}
+            className={`pb-2.5 px-3 sm:px-4 text-xs font-medium transition-colors cursor-pointer relative whitespace-nowrap ${
+              activeTab === 'audit' ? 'text-zinc-950 font-semibold' : 'text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <span>Audit Trail</span>
+            <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-600 font-mono text-[10px]">
+              {auditLogs.length}
+            </span>
+            {activeTab === 'audit' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-950 rounded-full" />
+            )}
+          </button>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* TAB 1: EDITABLE STUDENT ROSTER LOG (BACK OFFICE REGISTRY)                  */}
+        {/* ========================================================================= */}
+        {activeTab === 'roster' && (
+          <div className="space-y-4">
+            {/* Control Bar: Search, Filters & Actions */}
+            <div className="p-4 rounded-2xl bg-white/90 backdrop-blur-md border border-black/[0.07] shadow-xs space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Search Input */}
+                <div className="relative flex-1 max-w-md">
+                  <MagnifyingGlass
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
+                  />
+                  <input
+                    id="rosterSearchInput"
+                    name="rosterSearchInput"
+                    type="text"
+                    value={rosterSearch}
+                    onChange={(e) => setRosterSearch(e.target.value)}
+                    placeholder="Search by student name, matric, reg no, or email..."
+                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-zinc-200/90 text-xs bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-all font-tabular"
+                  />
+                </div>
+
+                {/* Primary Action Buttons */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetNewStudentForm();
+                      setIsAddModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-medium inline-flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <Plus size={14} weight="bold" />
+                    <span>Add Student</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={exportRosterCSV}
+                    className="px-3 py-2 rounded-xl border border-zinc-200/90 hover:bg-zinc-50 text-zinc-800 text-xs font-medium inline-flex items-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <DownloadSimple size={14} />
+                    <span>Export CSV</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResetToSeed}
+                    title="Restore full official roster seed (150+ students)"
+                    className="p-2 rounded-xl border border-zinc-200/90 hover:bg-zinc-50 text-zinc-600 hover:text-zinc-900 transition-all cursor-pointer"
+                  >
+                    <ArrowsCounterClockwise size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-zinc-100 flex-wrap text-xs">
+                {/* Level Filter */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase mr-1">Level:</span>
+                  {['ALL', '100L', '200L', '300L', '400L'].map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setRosterLevelFilter(lvl)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                        rosterLevelFilter === lvl
+                          ? 'bg-zinc-950 text-white'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/80'
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Course Track Filter */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase mr-1">Track:</span>
+                  {['ALL', 'FinTech', 'Finance'].map((trk) => (
+                    <button
+                      key={trk}
+                      type="button"
+                      onClick={() => setRosterCourseFilter(trk)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                        rosterCourseFilter === trk
+                          ? 'bg-zinc-950 text-white'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/80'
+                      }`}
+                    >
+                      {trk}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase mr-1">Status:</span>
+                  {[
+                    { key: 'ALL', label: 'All' },
+                    { key: 'CLEARED', label: 'Cleared' },
+                    { key: 'UNPAID', label: 'Unpaid' },
+                    { key: 'PENDING', label: 'Review' },
+                  ].map((st) => (
+                    <button
+                      key={st.key}
+                      type="button"
+                      onClick={() => setRosterStatusFilter(st.key)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                        rosterStatusFilter === st.key
+                          ? 'bg-zinc-950 text-white'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/80'
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Back Office Table */}
+            <div className="bg-white rounded-2xl border border-black/[0.07] shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200/80 bg-zinc-50/70 text-zinc-500 font-mono text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-4 font-medium">Student Name &amp; Email</th>
+                      <th className="py-3 px-4 font-medium">Matriculation &amp; Reg No</th>
+                      <th className="py-3 px-4 font-medium">Level &amp; Track</th>
+                      <th className="py-3 px-4 font-medium">Role</th>
+                      <th className="py-3 px-4 font-medium">Clearance Status</th>
+                      <th className="py-3 px-4 font-medium text-right">Back Office Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 font-tabular">
+                    {filteredStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-zinc-400 space-y-1">
+                          <p className="font-medium text-zinc-600 text-sm">No students match your criteria</p>
+                          <p className="text-xs">Try clearing the search or reset filters to display the full student body.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredStudents.map((s) => {
+                        const cl = clearanceStatusMap.get(normalizeMatric(s.matricNumber));
+                        const isCleared = cl?.status === 'cleared';
+                        const isPending = cl?.status === 'pending';
+
+                        return (
+                          <tr key={s.id} className="hover:bg-zinc-50/80 transition-colors">
+                            {/* Name & Email */}
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-zinc-900 block text-xs">
+                                {s.fullName}
+                              </span>
+                              <span className="text-[11px] text-zinc-400">{s.email}</span>
+                            </td>
+
+                            {/* Matric & Reg No */}
+                            <td className="py-3 px-4 font-mono">
+                              <span className="font-semibold text-zinc-900 block">
+                                {s.matricNumber}
+                              </span>
+                              {s.regNo && (
+                                <span className="text-[10px] text-zinc-400 block">
+                                  Reg: {s.regNo}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Level & Track */}
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-zinc-800">{s.level}</span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                    (s.course || '').toLowerCase() === 'fintech'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  }`}
+                                >
+                                  {s.course || 'Finance'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Role */}
+                            <td className="py-3 px-4">
+                              {s.roleType === 'executive' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                  <Sparkle size={10} weight="fill" className="text-amber-600" />
+                                  <span>{s.executiveTitle || 'Executive'}</span>
+                                </span>
+                              ) : (
+                                <span className="text-zinc-500 text-[11px]">Regular Scholar</span>
+                              )}
+                            </td>
+
+                            {/* Clearance Status */}
+                            <td className="py-3 px-4">
+                              {isCleared ? (
+                                <Link
+                                  href={`/verify/${cl.transaction?.receiptNumber}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                                >
+                                  <CheckCircle size={12} weight="fill" className="text-emerald-600" />
+                                  <span>{cl.transaction?.receiptNumber}</span>
+                                </Link>
+                              ) : isPending ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                  <Clock size={12} className="text-amber-600" />
+                                  <span>Awaiting Review</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                  <span>Unpaid (₦10k)</span>
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {!isCleared && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleManualClear(s.id, s.fullName)}
+                                    title="Issue direct manual departmental clearance"
+                                    className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[11px] transition-all cursor-pointer active:scale-[0.98]"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingStudent(s)}
+                                  title="Edit student record"
+                                  className="p-1 rounded text-zinc-500 hover:text-zinc-950 hover:bg-zinc-100 transition-colors cursor-pointer"
+                                >
+                                  <PencilSimple size={15} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteStudent(s.id, s.fullName)}
+                                  title="Archive student"
+                                  className="p-1 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                >
+                                  <Trash size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer Count */}
+              <div className="p-3 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between text-xs text-zinc-500 font-mono">
+                <span>Showing {filteredStudents.length} of {students.length} students</span>
+                <span>FINSA Registered Database</span>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Collapsible Fee Configuration Drawer */}
-        {showSettings && (
-          <div className="rounded-3xl bg-white border border-black/[0.08] shadow-[0_10px_35px_-8px_rgba(0,0,0,0.05)] p-6 sm:p-7 space-y-6 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between border-b border-black/[0.06] pb-4">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#064E3B] font-semibold block">
-                  Departmental Rate &amp; Rail Settings
-                </span>
-                <h2 className="text-base sm:text-lg font-bold text-[#0A0D0C]">
-                  Configure Course Dues &amp; Payment Options
-                </h2>
+        {/* ========================================================================= */}
+        {/* TAB 2: TRANSACTIONS & CLAIMS LEDGER                                       */}
+        {/* ========================================================================= */}
+        {activeTab === 'transactions' && (
+          <div className="space-y-4">
+            {/* Filter Bar */}
+            <div className="p-4 rounded-2xl bg-white/90 backdrop-blur-md border border-black/[0.07] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+              <div className="relative flex-1 max-w-md">
+                <MagnifyingGlass size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  id="txSearchInput"
+                  name="txSearchInput"
+                  type="text"
+                  value={txSearch}
+                  onChange={(e) => setTxSearch(e.target.value)}
+                  placeholder="Filter by student name, matric, or receipt..."
+                  className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-zinc-200 text-xs bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowSettings(false)}
-                className="w-7 h-7 rounded-full bg-[#F5F5F3] flex items-center justify-center text-[#717875] hover:text-[#0A0D0C] transition-colors cursor-pointer"
-              >
-                <X size={14} />
-              </button>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1">
+                  <span className="text-zinc-400 font-mono text-[11px]">Level:</span>
+                  {['ALL', '100L', '200L', '300L', '400L'].map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setTxLevelFilter(lvl)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                        txLevelFilter === lvl ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-zinc-400 font-mono text-[11px]">Status:</span>
+                  {[
+                    { key: 'ALL', label: 'All' },
+                    { key: 'success', label: 'Verified' },
+                    { key: 'pending_verification', label: 'Pending Claim' },
+                  ].map((st) => (
+                    <button
+                      key={st.key}
+                      type="button"
+                      onClick={() => setTxStatusFilter(st.key)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                        txStatusFilter === st.key ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveFeeSettings} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="reg-amount"
-                    className="block text-xs font-medium text-[#0A0D0C]"
-                  >
-                    Regular Student Dues (₦)
+            {/* Transactions Table */}
+            <div className="bg-white rounded-2xl border border-black/[0.07] shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50/70 text-zinc-500 font-mono text-[11px] uppercase tracking-wider">
+                      <th className="py-3 px-4 font-medium">Receipt / Reference</th>
+                      <th className="py-3 px-4 font-medium">Student Identity</th>
+                      <th className="py-3 px-4 font-medium">Level &amp; Role</th>
+                      <th className="py-3 px-4 font-medium">Amount &amp; Rail</th>
+                      <th className="py-3 px-4 font-medium">Status &amp; Verification</th>
+                      <th className="py-3 px-4 font-medium text-right">Reconciliation Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 font-tabular">
+                    {filteredTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-zinc-400">
+                          No transactions found matching criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTransactions.map((t) => {
+                        const isVerified = t.status === 'success';
+                        const isPendingClaim = t.status === 'pending_verification';
+
+                        return (
+                          <tr key={t.id} className="hover:bg-zinc-50/80 transition-colors">
+                            <td className="py-3 px-4 font-mono">
+                              {t.receiptNumber ? (
+                                <Link
+                                  href={`/verify/${t.receiptNumber}`}
+                                  className="font-semibold text-blue-600 hover:underline block"
+                                >
+                                  {t.receiptNumber}
+                                </Link>
+                              ) : (
+                                <span className="text-zinc-500 block">{t.reference}</span>
+                              )}
+                              <span className="text-[10px] text-zinc-400 block">
+                                {formatDeterministicTime(t.createdAt)}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-zinc-900 block">{t.studentName}</span>
+                              <span className="text-[11px] font-mono text-zinc-500">{t.matricNumber}</span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span className="font-medium text-zinc-800">{t.level}</span>
+                              <span className="text-[10px] text-zinc-400 block">
+                                {t.roleType === 'executive' ? (t.executiveTitle || 'Executive') : 'Regular'}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4 font-mono">
+                              <span className="font-bold text-zinc-950 block">{formatNaira(t.amountNaira)}</span>
+                              <span className="text-[10px] text-zinc-500 uppercase">
+                                {t.paymentRail.replace('_', ' ')}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {isVerified ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  <CheckCircle size={12} weight="fill" className="text-emerald-600" />
+                                  <span>Verified</span>
+                                </span>
+                              ) : isPendingClaim ? (
+                                <div className="space-y-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                    <Clock size={12} className="text-amber-600" />
+                                    <span>Transfer Claim</span>
+                                  </span>
+                                  <span className="text-[10px] text-zinc-500 block font-mono">
+                                    {t.transferSenderBank} · {t.transferSessionId}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-400 font-mono text-[11px]">{t.status}</span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              {isPendingClaim ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApprove(t.id)}
+                                    className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs transition-all active:scale-[0.98] cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReject(t.id)}
+                                    className="px-2.5 py-1 rounded border border-zinc-200 hover:bg-red-50 hover:text-red-600 text-zinc-600 font-medium text-xs transition-colors cursor-pointer"
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-400 text-[11px] font-mono">Reconciled</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: TREASURY FEE SETTINGS                                              */}
+        {/* ========================================================================= */}
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-black/[0.07] p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="border-b border-zinc-100 pb-4">
+              <h2 className="text-base font-semibold text-zinc-950 tracking-tight">
+                Treasury &amp; Departmental Dues Schedule
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Configure official session dues amounts and official collection bank account.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label htmlFor="regDueInput" className="font-medium text-zinc-700 block">
+                    Regular Course Due (₦)
                   </label>
                   <input
-                    id="reg-amount"
+                    id="regDueInput"
+                    name="regDueInput"
                     type="number"
                     value={regInput}
                     onChange={(e) => setRegInput(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 font-mono text-sm font-bold text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-xs text-zinc-900"
                   />
-                  <span className="text-[10px] font-mono text-[#717875] block">
-                    Default: ₦10,000
-                  </span>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="exec-amount"
-                    className="block text-xs font-medium text-[#0A0D0C]"
-                  >
-                    Student Executive Dues (₦)
+                <div className="space-y-1">
+                  <label htmlFor="execDueInput" className="font-medium text-zinc-700 block">
+                    Executive Council Due (₦)
                   </label>
                   <input
-                    id="exec-amount"
+                    id="execDueInput"
+                    name="execDueInput"
                     type="number"
                     value={execInput}
                     onChange={(e) => setExecInput(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 font-mono text-sm font-bold text-[#064E3B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
-                  />
-                  <span className="text-[10px] font-mono text-[#717875] block">
-                    Default: ₦15,000
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="bank-name"
-                    className="block text-xs font-medium text-[#0A0D0C]"
-                  >
-                    Bank Name
-                  </label>
-                  <input
-                    id="bank-name"
-                    type="text"
-                    value={bankNameInput}
-                    onChange={(e) => setBankNameInput(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 text-xs text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="acct-no"
-                    className="block text-xs font-medium text-[#0A0D0C]"
-                  >
-                    Departmental Account No.
-                  </label>
-                  <input
-                    id="acct-no"
-                    type="text"
-                    value={acctNoInput}
-                    onChange={(e) => setAcctNoInput(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 font-mono text-xs text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-xs text-zinc-900"
                   />
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-black/[0.06]">
-                <div className="flex flex-wrap items-center gap-6 text-xs">
-                  <label className="inline-flex items-center gap-2 font-medium text-[#0A0D0C] cursor-pointer">
+              <div className="space-y-1">
+                <label htmlFor="deptBankInput" className="font-medium text-zinc-700 block">
+                  Departmental Bank Name
+                </label>
+                <input
+                  id="deptBankInput"
+                  name="deptBankInput"
+                  type="text"
+                  value={bankNameInput}
+                  onChange={(e) => setBankNameInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs text-zinc-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label htmlFor="deptAcctNoInput" className="font-medium text-zinc-700 block">
+                    Account Number
+                  </label>
+                  <input
+                    id="deptAcctNoInput"
+                    name="deptAcctNoInput"
+                    type="text"
+                    value={acctNoInput}
+                    onChange={(e) => setAcctNoInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-xs text-zinc-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="deptAcctNameInput" className="font-medium text-zinc-700 block">
+                    Account Name
+                  </label>
+                  <input
+                    id="deptAcctNameInput"
+                    name="deptAcctNameInput"
+                    type="text"
+                    value={acctNameInput}
+                    onChange={(e) => setAcctNameInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs text-zinc-900"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-100 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={paystackEnabled}
                       onChange={(e) => setPaystackEnabled(e.target.checked)}
-                      className="accent-[#064E3B] w-4 h-4 rounded"
+                      className="rounded text-zinc-950 focus:ring-0"
                     />
-                    <span>Paystack Card / Transfer Gateway</span>
+                    <span>Enable Paystack</span>
                   </label>
-
-                  <label className="inline-flex items-center gap-2 font-medium text-[#0A0D0C] cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={transferEnabled}
                       onChange={(e) => setTransferEnabled(e.target.checked)}
-                      className="accent-[#064E3B] w-4 h-4 rounded"
+                      className="rounded text-zinc-950 focus:ring-0"
                     />
-                    <span>Direct Bank Transfer Claim Fallback</span>
+                    <span>Enable Bank Transfer</span>
                   </label>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSettings(false)}
-                    className="px-4 py-2 rounded-full border border-black/10 text-xs font-medium text-[#525856] hover:bg-[#F5F5F3] transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-full bg-[#064E3B] text-white text-xs font-medium hover:bg-[#0A0D0C] transition-all duration-150 active:scale-[0.97] cursor-pointer shadow-xs"
-                  >
-                    Save &amp; Broadcast
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-white font-medium text-xs transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  Save Treasury Rules
+                </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* 4 Executive Metrics Cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
-          {/* Card 1: Total Verified Revenue */}
-          <div className="lg:col-span-4 rounded-xl bg-zinc-950 text-white p-5 border border-zinc-900 flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">
-                Verified Collections
-              </span>
-              <CurrencyNgn size={18} className="text-zinc-400" />
-            </div>
-            <div>
-              <p className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-white font-tabular">
-                {mounted ? formatNaira(metrics.totalRevenue) : '₦0'}
-              </p>
-            </div>
-            <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pt-2.5 border-t border-zinc-800">
-              <span>Regular: {metrics.regularPaidCount}</span>
-              <span>Executive: {metrics.execPaidCount}</span>
-            </div>
-          </div>
-
-          {/* Card 2: Cleared Students */}
-          <div className="lg:col-span-3 rounded-xl bg-white border border-zinc-200 p-5 flex flex-col justify-between space-y-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono uppercase tracking-wider text-zinc-500">
-                Financially Cleared
-              </span>
-              <ShieldCheck size={18} weight="fill" className="text-emerald-700" />
-            </div>
-            <div>
-              <p className="text-2xl font-mono font-bold text-zinc-950 font-tabular">
-                {metrics.paidCount}{' '}
-                <span className="text-xs font-normal text-zinc-500">
-                  / {students.length} on roster
-                </span>
-              </p>
-            </div>
-            <p className="text-xs text-zinc-500">
-              {metrics.outstandingCount} students pending payment
-            </p>
-          </div>
-
-          {/* Card 3: Pending Approvals */}
-          <div className="lg:col-span-2 rounded-xl bg-white border border-zinc-200 p-5 flex flex-col justify-between space-y-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono uppercase tracking-wider text-amber-700">
-                Pending Queue
-              </span>
-              <Clock size={18} weight="fill" className="text-amber-700" />
-            </div>
-            <div>
-              <p className="text-2xl font-mono font-bold text-zinc-950 font-tabular">
-                {metrics.pendingCount}
-              </p>
-            </div>
-            <p className="text-xs text-zinc-500">Bank transfers to review</p>
-          </div>
-
-          {/* Card 4: Level Breakdown */}
-          <div className="lg:col-span-3 rounded-xl bg-white border border-zinc-200 p-4 flex flex-col justify-between space-y-2 shadow-xs">
-            <span className="text-xs font-mono uppercase tracking-wider text-zinc-500">
-              Clearance by Level
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-              {(['100L', '200L', '300L', '400L'] as AcademicLevel[]).map((lvl) => (
-                <div
-                  key={lvl}
-                  className="p-2 rounded-lg bg-zinc-50 border border-zinc-200/80 flex items-center justify-between"
-                >
-                  <span className="font-semibold text-zinc-900">{lvl}</span>
-                  <span className="text-emerald-800 font-bold">
-                    {metrics.byLevel[lvl].paid} paid
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Master Clearance Ledger Table & Toolbar */}
-        <section className="rounded-3xl bg-white border border-black/[0.08] shadow-[0_4px_24px_-4px_rgba(0,0,0,0.03)] p-6 sm:p-7 space-y-6">
-          {/* Header Row & Quick Export Actions */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-black/[0.06]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-[#064E3B]/10 flex items-center justify-center text-[#064E3B] shrink-0">
-                <ListChecks size={18} weight="bold" />
-              </div>
+        {/* ========================================================================= */}
+        {/* TAB 4: AUDIT TRAIL                                                        */}
+        {/* ========================================================================= */}
+        {activeTab === 'audit' && (
+          <div className="bg-white rounded-2xl border border-black/[0.07] shadow-xs p-6 space-y-4">
+            <div className="border-b border-zinc-100 pb-3 flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-[#0A0D0C] tracking-tight">
-                  Master Clearance Ledger
+                <h2 className="text-base font-semibold text-zinc-950 tracking-tight">
+                  Cryptographic System Audit Trail
                 </h2>
-                <p className="text-xs text-[#717875]">
-                  Live transactions, instant approvals, and verified credentials
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Tamper-evident chronological log of all clearance issuances, payments, and administrative actions.
                 </p>
               </div>
+              <span className="font-mono text-xs text-zinc-400">{auditLogs.length} Events Logged</span>
             </div>
 
-            {/* CSV Quick Export Cluster */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#717875] mr-1 hidden sm:inline">
-                Download:
-              </span>
-              <button
-                type="button"
-                onClick={() => downloadSpreadsheet('verified_only')}
-                className="px-3 py-1.5 rounded-full bg-[#064E3B]/10 hover:bg-[#064E3B]/15 text-[#064E3B] text-xs font-mono font-medium transition-all duration-150 active:scale-[0.97] cursor-pointer"
-              >
-                ✓ Verified Paid Only
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadSpreadsheet('by_level')}
-                className="px-3 py-1.5 rounded-full bg-[#F5F5F3] hover:bg-black/[0.06] text-[#0A0D0C] text-xs font-mono transition-all duration-150 active:scale-[0.97] cursor-pointer"
-              >
-                ↓ Grouped by Level
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadSpreadsheet('outstanding_roster')}
-                className="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 text-[#B45309] text-xs font-mono transition-all duration-150 active:scale-[0.97] cursor-pointer"
-              >
-                ↓ Outstanding Defaulters ({metrics.outstandingCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadSpreadsheet('all_attempts')}
-                className="px-3 py-1.5 rounded-full bg-[#F5F5F3] hover:bg-black/[0.06] text-[#717875] text-xs font-mono transition-all duration-150 active:scale-[0.97] cursor-pointer"
-              >
-                ↓ All Records
-              </button>
-            </div>
-          </div>
-
-          {/* Search & Multi-Axis Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
-            <div className="lg:col-span-5 relative">
-              <MagnifyingGlass
-                size={16}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#717875]"
-              />
-              <input
-                id="admin-search-input"
-                name="adminSearch"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Matric (22AG...), Name, or Receipt No..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 text-xs sm:text-sm text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
-              />
-            </div>
-
-            <div className="lg:col-span-2">
-              <select
-                id="admin-level-filter"
-                name="adminLevelFilter"
-                aria-label="Filter by Level"
-                value={levelFilter}
-                onChange={(e) => setLevelFilter(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 text-xs font-mono text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
-              >
-                <option value="ALL">All Levels</option>
-                <option value="100L">100 Level</option>
-                <option value="200L">200 Level</option>
-                <option value="300L">300 Level</option>
-                <option value="400L">400 Level</option>
-                <option value="Postgrad">Postgraduate</option>
-              </select>
-            </div>
-
-            <div className="lg:col-span-2">
-              <select
-                id="admin-role-filter"
-                name="adminRoleFilter"
-                aria-label="Filter by Classification"
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 text-xs font-mono text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
-              >
-                <option value="ALL">All Roles</option>
-                <option value="regular">Regular (₦{(feeConfig.regularAmountNaira).toLocaleString()})</option>
-                <option value="executive">Executive (₦{(feeConfig.executiveAmountNaira).toLocaleString()})</option>
-              </select>
-            </div>
-
-            <div className="lg:col-span-3">
-              <select
-                id="admin-status-filter"
-                name="adminStatusFilter"
-                aria-label="Filter by Payment Status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#F7F7F6] border border-black/10 text-xs font-mono text-[#0A0D0C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#064E3B]"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="success">✓ Verified &amp; Cleared</option>
-                <option value="pending_verification">⏳ Pending Bank Transfer</option>
-                <option value="failed">✕ Declined / Failed</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Table Surface */}
-          <div className="overflow-x-auto border border-black/[0.08] rounded-2xl">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#F9F9FB] border-b border-black/[0.06] text-[10px] font-mono uppercase tracking-wider text-[#717875]">
-                  <th className="py-3 px-4 font-semibold">Student &amp; Matric No</th>
-                  <th className="py-3 px-4 font-semibold">Level &amp; Tier</th>
-                  <th className="py-3 px-4 font-semibold">Amount</th>
-                  <th className="py-3 px-4 font-semibold">Rail &amp; Reference</th>
-                  <th className="py-3 px-4 font-semibold">Clearance Status</th>
-                  <th className="py-3 px-4 text-right font-semibold">Actions / Credential</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/[0.04] text-xs">
-                {filteredTransactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-[#F7F7FA] transition-colors duration-150">
-                    <td className="py-3.5 px-4">
-                      <p className="font-semibold text-[#0A0D0C]">{tx.studentName}</p>
-                      <p className="font-mono text-[#717875] text-[11px] mt-0.5">{tx.matricNumber}</p>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono font-semibold text-[#0A0D0C]">{tx.level}</span>
-                      <span
-                        className={`ml-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-mono uppercase ${
-                          tx.roleType === 'executive'
-                            ? 'bg-[#064E3B]/10 text-[#064E3B] font-semibold'
-                            : 'bg-black/[0.05] text-[#717875]'
-                        }`}
-                      >
-                        {tx.roleType === 'executive'
-                          ? `EXEC (${tx.executiveTitle || 'Council'})`
-                          : 'REGULAR'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-[#0A0D0C] font-tabular">
-                      {formatNaira(tx.amountNaira)}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-[#717875]">
-                      <p className="text-[#0A0D0C] font-medium uppercase">{tx.paymentRail}</p>
-                      <p className="truncate max-w-[140px]">{tx.reference}</p>
-                      {tx.transferSenderBank && (
-                        <p className="text-[#B45309]">
-                          {tx.transferSenderBank} · {tx.transferSessionId}
-                        </p>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {tx.status === 'success' && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-[#064E3B] border border-emerald-200/60 font-mono text-[11px] font-semibold">
-                          <CheckCircle size={13} weight="fill" />
-                          <span>{tx.receiptNumber}</span>
-                        </span>
-                      )}
-                      {tx.status === 'pending_verification' && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-[#B45309] border border-amber-200/60 font-mono text-[11px] font-semibold">
-                          <Clock size={13} weight="fill" />
-                          <span>Pending Approval</span>
-                        </span>
-                      )}
-                      {tx.status === 'failed' && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200/60 font-mono text-[11px]">
-                          <XCircle size={13} weight="fill" />
-                          <span>Declined</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {tx.status === 'pending_verification' ? (
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleApproveTransfer(tx.id)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#064E3B] text-white font-mono text-[11px] font-medium hover:bg-[#0A0D0C] transition-all duration-150 active:scale-[0.97] cursor-pointer"
-                          >
-                            <Check size={12} weight="bold" />
-                            <span>Approve</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRejectTransfer(tx.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-mono text-[11px] hover:bg-red-100 transition-all duration-150 active:scale-[0.97] cursor-pointer"
-                            title="Decline Transfer Claim"
-                          >
-                            <X size={12} weight="bold" />
-                          </button>
-                        </div>
-                      ) : tx.receiptNumber ? (
-                        <Link
-                          href={`/verify/${tx.receiptNumber}`}
-                          className="inline-flex items-center gap-1 font-mono text-[11px] text-[#064E3B] hover:underline"
-                        >
-                          <span>Credential</span>
-                          <ArrowUpRight size={13} />
-                        </Link>
-                      ) : (
-                        <span className="text-[#717875] font-mono">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {filteredTransactions.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-10 text-center text-[#717875] font-mono text-xs">
-                      No transactions match the current search or filter criteria.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Bottom Split: Outstanding Defaulters Watchlist + Immutable Audit Trail */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Outstanding Students (6 cols) */}
-          <div className="lg:col-span-6 rounded-3xl bg-white border border-black/[0.08] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-black/[0.06]">
-              <div className="flex items-center gap-2">
-                <Users size={18} className="text-[#B45309]" />
-                <h3 className="text-sm font-bold text-[#0A0D0C]">
-                  Outstanding Roster Students ({metrics.outstandingCount})
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => downloadSpreadsheet('outstanding_roster')}
-                className="text-xs font-mono text-[#064E3B] hover:underline cursor-pointer"
-              >
-                Export CSV →
-              </button>
-            </div>
-
-            <div className="divide-y divide-black/[0.05] max-h-72 overflow-y-auto pr-1">
-              {metrics.outstandingStudents.map((stu) => (
+            <div className="space-y-2">
+              {auditLogs.map((log) => (
                 <div
-                  key={stu.id}
-                  className="py-3 flex items-center justify-between gap-4 text-xs"
+                  key={log.id}
+                  className="p-3 rounded-xl bg-zinc-50/70 border border-zinc-100 flex items-start justify-between gap-4 text-xs"
                 >
-                  <div>
-                    <p className="font-semibold text-[#0A0D0C]">{stu.fullName}</p>
-                    <p className="font-mono text-[#717875] text-[11px] mt-0.5">
-                      {stu.matricNumber} · {stu.level} ·{' '}
-                      {stu.roleType === 'executive'
-                        ? `Executive (${stu.executiveTitle || 'Council'})`
-                        : 'Regular'}
-                    </p>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-zinc-950 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200">
+                        {log.action}
+                      </span>
+                      <span className="text-zinc-600 font-medium">by {log.actor}</span>
+                    </div>
+                    <p className="text-zinc-700">{log.details}</p>
                   </div>
-                  <span className="font-mono font-bold text-[#B45309] font-tabular">
-                    Owes{' '}
-                    {formatNaira(
-                      stu.roleType === 'executive'
-                        ? feeConfig.executiveAmountNaira
-                        : feeConfig.regularAmountNaira
-                    )}
+                  <span className="font-mono text-[10px] text-zinc-400 shrink-0">
+                    {formatDeterministicTime(log.createdAt)}
                   </span>
                 </div>
               ))}
-              {metrics.outstandingStudents.length === 0 && (
-                <p className="py-8 text-center text-xs font-mono text-[#064E3B]">
-                  All roster students have been verified and cleared!
-                </p>
-              )}
             </div>
           </div>
-
-          {/* Immutable Audit Log (6 cols) */}
-          <div className="lg:col-span-6 rounded-3xl bg-white border border-black/[0.08] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] p-6 space-y-4">
-            <div className="pb-3 border-b border-black/[0.06]">
-              <h3 className="text-sm font-bold text-[#0A0D0C]">
-                Immutable Financial Audit Trail
-              </h3>
-              <p className="text-xs text-[#717875] mt-0.5">
-                Cryptographic logging of dues policy modifications and verifications
-              </p>
-            </div>
-
-            <div className="divide-y divide-black/[0.05] max-h-72 overflow-y-auto pr-1">
-              {auditLogs.slice(0, 10).map((log) => (
-                <div key={log.id} className="py-2.5 text-xs space-y-0.5">
-                  <div className="flex items-center justify-between font-mono text-[11px]">
-                    <span className="font-semibold text-[#064E3B]">{log.action}</span>
-                    <span className="text-[#717875]">
-                      {mounted ? formatDeterministicTime(log.createdAt) : ''}
-                    </span>
-                  </div>
-                  <p className="text-[#0A0D0C] text-[11px]">{log.details}</p>
-                  <p className="text-[10px] font-mono text-[#717875]">Actor: {log.actor}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        )}
       </main>
 
-      <footer className="border-t border-black/[0.06] bg-white/50 py-5 px-4 text-xs text-[#717875]">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <p>
-            Department of Banking &amp; Finance (FINSA) · Covenant University Administrative Terminal
-          </p>
-          <div className="flex items-center gap-3 font-mono">
-            <Link href="/" className="hover:text-[#0A0D0C]">
-              ← Student Portal
-            </Link>
+      {/* ========================================================================= */}
+      {/* MODAL: ADD STUDENT DIALOG                                                 */}
+      {/* ========================================================================= */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl border border-black/[0.08] shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
+              <div>
+                <h3 className="text-base font-semibold text-zinc-950">Add Scholar to Back Office Registry</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Enroll a student into the official Department of Banking &amp; Finance roster.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-3 rounded-lg bg-red-50 text-red-700 text-xs border border-red-200 flex items-center gap-2">
+                <WarningCircle size={15} />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateStudent} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label htmlFor="newStudentName" className="font-medium text-zinc-700 block">
+                  Full Legal Name
+                </label>
+                <input
+                  id="newStudentName"
+                  name="newStudentName"
+                  type="text"
+                  required
+                  value={newStudentName}
+                  onChange={(e) => setNewStudentName(e.target.value)}
+                  placeholder="e.g. Adeyemi Ayotunde Immanuel"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label htmlFor="newStudentMatric" className="font-medium text-zinc-700 block">
+                    Matriculation Number
+                  </label>
+                  <input
+                    id="newStudentMatric"
+                    name="newStudentMatric"
+                    type="text"
+                    required
+                    value={newStudentMatric}
+                    onChange={(e) => setNewStudentMatric(e.target.value.toUpperCase())}
+                    placeholder="e.g. 25AG031075"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-zinc-950 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="newStudentRegNo" className="font-medium text-zinc-700 block">
+                    Registration No (Optional)
+                  </label>
+                  <input
+                    id="newStudentRegNo"
+                    name="newStudentRegNo"
+                    type="text"
+                    value={newStudentRegNo}
+                    onChange={(e) => setNewStudentRegNo(e.target.value)}
+                    placeholder="e.g. 2501075"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-zinc-950 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label htmlFor="newStudentLevel" className="font-medium text-zinc-700 block">
+                    Academic Level
+                  </label>
+                  <select
+                    id="newStudentLevel"
+                    name="newStudentLevel"
+                    value={newStudentLevel}
+                    onChange={(e) => setNewStudentLevel(e.target.value as AcademicLevel)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                  >
+                    {LEVELS.map((lvl) => (
+                      <option key={lvl} value={lvl}>{lvl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="newStudentCourse" className="font-medium text-zinc-700 block">
+                    Departmental Track
+                  </label>
+                  <select
+                    id="newStudentCourse"
+                    name="newStudentCourse"
+                    value={newStudentCourse}
+                    onChange={(e) => setNewStudentCourse(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                  >
+                    <option value="FinTech">FinTech</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Banking & Finance">Banking &amp; Finance</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="newStudentRole" className="font-medium text-zinc-700 block">
+                  Classification Role
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="roleType"
+                      checked={newStudentRole === 'regular'}
+                      onChange={() => setNewStudentRole('regular')}
+                      className="text-zinc-950"
+                    />
+                    <span>Regular Student</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="roleType"
+                      checked={newStudentRole === 'executive'}
+                      onChange={() => setNewStudentRole('executive')}
+                      className="text-zinc-950"
+                    />
+                    <span>Executive Officer</span>
+                  </label>
+                </div>
+              </div>
+
+              {newStudentRole === 'executive' && (
+                <div className="space-y-1">
+                  <label htmlFor="newStudentExecTitle" className="font-medium text-zinc-700 block">
+                    Executive Portfolio Title
+                  </label>
+                  <input
+                    id="newStudentExecTitle"
+                    name="newStudentExecTitle"
+                    type="text"
+                    required
+                    value={newStudentExecTitle}
+                    onChange={(e) => setNewStudentExecTitle(e.target.value)}
+                    placeholder="e.g. FINSA Public Relations Officer"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-3.5 py-2 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-white font-medium active:scale-[0.98]"
+                >
+                  Enroll Scholar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT STUDENT DIALOG                                                */}
+      {/* ========================================================================= */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl border border-black/[0.08] shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
+              <div>
+                <h3 className="text-base font-semibold text-zinc-950">Edit Scholar Record</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Modify registered academic information for {editingStudent.matricNumber}.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStudent(null)}
+                className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateStudent} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label htmlFor="editStudentName" className="font-medium text-zinc-700 block">
+                  Full Legal Name
+                </label>
+                <input
+                  id="editStudentName"
+                  name="editStudentName"
+                  type="text"
+                  required
+                  value={editingStudent.fullName}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, fullName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label htmlFor="editStudentMatric" className="font-medium text-zinc-700 block">
+                    Matriculation Number
+                  </label>
+                  <input
+                    id="editStudentMatric"
+                    name="editStudentMatric"
+                    type="text"
+                    required
+                    value={editingStudent.matricNumber}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, matricNumber: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-zinc-950 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="editStudentRegNo" className="font-medium text-zinc-700 block">
+                    Registration No
+                  </label>
+                  <input
+                    id="editStudentRegNo"
+                    name="editStudentRegNo"
+                    type="text"
+                    value={editingStudent.regNo || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, regNo: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 font-mono text-zinc-950 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="editStudentEmail" className="font-medium text-zinc-700 block">
+                  Email Address
+                </label>
+                <input
+                  id="editStudentEmail"
+                  name="editStudentEmail"
+                  type="email"
+                  required
+                  value={editingStudent.email}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, email: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label htmlFor="editStudentLevel" className="font-medium text-zinc-700 block">
+                    Academic Level
+                  </label>
+                  <select
+                    id="editStudentLevel"
+                    name="editStudentLevel"
+                    value={editingStudent.level}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, level: e.target.value as AcademicLevel })}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                  >
+                    {LEVELS.map((lvl) => (
+                      <option key={lvl} value={lvl}>{lvl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="editStudentCourse" className="font-medium text-zinc-700 block">
+                    Departmental Track
+                  </label>
+                  <select
+                    id="editStudentCourse"
+                    name="editStudentCourse"
+                    value={editingStudent.course || 'Finance'}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, course: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                  >
+                    <option value="FinTech">FinTech</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Banking & Finance">Banking &amp; Finance</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-medium text-zinc-700 block">Classification Role</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="editRoleType"
+                      checked={editingStudent.roleType === 'regular'}
+                      onChange={() => setEditingStudent({ ...editingStudent, roleType: 'regular' })}
+                      className="text-zinc-950"
+                    />
+                    <span>Regular Student</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="editRoleType"
+                      checked={editingStudent.roleType === 'executive'}
+                      onChange={() => setEditingStudent({ ...editingStudent, roleType: 'executive' })}
+                      className="text-zinc-950"
+                    />
+                    <span>Executive Officer</span>
+                  </label>
+                </div>
+              </div>
+
+              {editingStudent.roleType === 'executive' && (
+                <div className="space-y-1">
+                  <label htmlFor="editStudentExecTitle" className="font-medium text-zinc-700 block">
+                    Executive Portfolio Title
+                  </label>
+                  <input
+                    id="editStudentExecTitle"
+                    name="editStudentExecTitle"
+                    type="text"
+                    value={editingStudent.executiveTitle || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, executiveTitle: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-zinc-950 bg-white"
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  className="px-3.5 py-2 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-white font-medium active:scale-[0.98]"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Institutional Precision Footer */}
+      <footer className="border-t border-black/[0.06] bg-white py-6 text-xs text-zinc-400">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-zinc-900">FINSA Command</span>
             <span>·</span>
-            <Link href="/verify/FINSA-26-00101" className="hover:text-[#0A0D0C]">
-              Verification Scanner
-            </Link>
+            <span>Back Office Student Administration</span>
+          </div>
+          <div className="font-mono text-[11px] text-zinc-400">
+            <span>Covenant University · College of Management and Social Sciences</span>
           </div>
         </div>
       </footer>

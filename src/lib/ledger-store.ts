@@ -1,15 +1,19 @@
+import { OFFICIAL_ROSTER_SEED } from './student-roster-data';
+
 export type AcademicLevel = '100L' | '200L' | '300L' | '400L' | 'Postgrad';
 export type StudentRoleType = 'regular' | 'executive';
-export type PaymentRail = 'paystack' | 'bank_transfer';
+export type PaymentRail = 'paystack' | 'bank_transfer' | 'manual_admin';
 export type TransactionStatus = 'pending' | 'pending_verification' | 'success' | 'failed';
 
 export interface StudentRecord {
   id: string;
   matricNumber: string; // e.g. '22AG031042'
+  regNo?: string; // e.g. '2502080' or '2300842'
   fullName: string;
   email: string;
   level: AcademicLevel;
   roleType: StudentRoleType;
+  course?: string; // 'Finance' | 'FinTech' | 'Banking & Finance'
   executiveTitle?: string;
   isRosterVerified: boolean;
   createdAt: string;
@@ -90,92 +94,7 @@ export const INITIAL_FEE_CONFIG: FeeConfig = {
   updatedAt: '2026-11-06T12:00:00.000Z',
 };
 
-export const SEEDED_STUDENTS: StudentRecord[] = [
-  {
-    id: 'stu-01',
-    matricNumber: '22AG031042',
-    fullName: 'Adeyemi Oluwatobiloba David',
-    email: 'tobiloba.adeyemi@stu.cu.edu.ng',
-    level: '400L',
-    roleType: 'executive',
-    executiveTitle: 'FINSA President',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:00:00.000Z',
-  },
-  {
-    id: 'stu-02',
-    matricNumber: '22AG031089',
-    fullName: 'Chukwuemeka Chidinma Claire',
-    email: 'chidinma.chukwuemeka@stu.cu.edu.ng',
-    level: '400L',
-    roleType: 'executive',
-    executiveTitle: 'Financial Secretary',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:05:00.000Z',
-  },
-  {
-    id: 'stu-03',
-    matricNumber: '23AG033418',
-    fullName: 'Ogunleye Inioluwa Emmanuel',
-    email: 'inioluwa.ogunleye@stu.cu.edu.ng',
-    level: '300L',
-    roleType: 'executive',
-    executiveTitle: 'General Secretary',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:10:00.000Z',
-  },
-  {
-    id: 'stu-04',
-    matricNumber: '23AG033512',
-    fullName: 'Bello Moyosoreoluwa Zainab',
-    email: 'moyosore.bello@stu.cu.edu.ng',
-    level: '300L',
-    roleType: 'regular',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:15:00.000Z',
-  },
-  {
-    id: 'stu-05',
-    matricNumber: '24AG035109',
-    fullName: 'Nwosu Kamsiyochukwu Daniel',
-    email: 'kamsi.nwosu@stu.cu.edu.ng',
-    level: '200L',
-    roleType: 'regular',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:20:00.000Z',
-  },
-  {
-    id: 'stu-06',
-    matricNumber: '24AG035277',
-    fullName: 'Osagie Osahon Joshua',
-    email: 'osahon.osagie@stu.cu.edu.ng',
-    level: '200L',
-    roleType: 'executive',
-    executiveTitle: 'Assistant Welfare Director',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:25:00.000Z',
-  },
-  {
-    id: 'stu-07',
-    matricNumber: '25AG037804',
-    fullName: 'Ezeife Munachimso Miracle',
-    email: 'munachimso.ezeife@stu.cu.edu.ng',
-    level: '100L',
-    roleType: 'regular',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:30:00.000Z',
-  },
-  {
-    id: 'stu-08',
-    matricNumber: '22AG031140',
-    fullName: 'Afolabi Ayomide Samuel',
-    email: 'ayomide.afolabi@stu.cu.edu.ng',
-    level: '400L',
-    roleType: 'regular',
-    isRosterVerified: true,
-    createdAt: '2026-11-01T09:35:00.000Z',
-  },
-];
+export const SEEDED_STUDENTS: StudentRecord[] = OFFICIAL_ROSTER_SEED;
 
 export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
   {
@@ -778,4 +697,161 @@ export function authenticateStudent(
 export function getSampleDemoStudents(): StudentRecord[] {
   return getStudents();
 }
+
+/**
+ * Back-office Student CRUD and Manual Clearance overrides
+ */
+export function createBackofficeStudent(
+  data: {
+    matricNumber: string;
+    regNo?: string;
+    fullName: string;
+    email: string;
+    level: AcademicLevel;
+    roleType: StudentRoleType;
+    course?: string;
+    executiveTitle?: string;
+  },
+  actor = 'Department Admin'
+): StudentRecord {
+  const matric = normalizeMatric(data.matricNumber);
+  const students = getStudents();
+
+  const newStudent: StudentRecord = {
+    id: `stu-bo-${Date.now()}`,
+    matricNumber: matric,
+    regNo: data.regNo?.trim() || undefined,
+    fullName: data.fullName.trim(),
+    email: data.email.trim().toLowerCase(),
+    level: data.level,
+    roleType: data.roleType,
+    course: data.course?.trim() || 'Finance',
+    executiveTitle: data.roleType === 'executive' ? data.executiveTitle?.trim() : undefined,
+    isRosterVerified: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  const updated = [newStudent, ...students];
+  if (isBrowser()) {
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+    addAuditLog(
+      actor,
+      'STUDENT_CREATED',
+      `Enrolled student ${newStudent.fullName} (${newStudent.matricNumber}) into ${newStudent.level} ${newStudent.course}`
+    );
+  }
+  return newStudent;
+}
+
+export function updateBackofficeStudent(
+  id: string,
+  partial: Partial<Omit<StudentRecord, 'id' | 'createdAt'>>,
+  actor = 'Department Admin'
+): StudentRecord | null {
+  const students = getStudents();
+  const idx = students.findIndex((s) => s.id === id);
+  if (idx === -1) return null;
+
+  const current = students[idx];
+  const updated: StudentRecord = {
+    ...current,
+    ...partial,
+    matricNumber: partial.matricNumber ? normalizeMatric(partial.matricNumber) : current.matricNumber,
+    fullName: partial.fullName ? partial.fullName.trim() : current.fullName,
+    email: partial.email ? partial.email.trim().toLowerCase() : current.email,
+  };
+
+  students[idx] = updated;
+  if (isBrowser()) {
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+    addAuditLog(
+      actor,
+      'STUDENT_UPDATED',
+      `Updated student record ${updated.matricNumber} (${updated.fullName})`
+    );
+  }
+  return updated;
+}
+
+export function deleteBackofficeStudent(id: string, actor = 'Department Admin'): boolean {
+  const students = getStudents();
+  const target = students.find((s) => s.id === id);
+  if (!target) return false;
+
+  const next = students.filter((s) => s.id !== id);
+  if (isBrowser()) {
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(next));
+    addAuditLog(
+      actor,
+      'STUDENT_DELETED',
+      `Archived student ${target.fullName} (${target.matricNumber}) from official registry`
+    );
+  }
+  return true;
+}
+
+export function manualClearStudent(
+  studentId: string,
+  actor = 'Financial Secretary'
+): TransactionRecord | null {
+  const students = getStudents();
+  const student = students.find((s) => s.id === studentId);
+  if (!student) return null;
+
+  const transactions = getTransactions();
+  const config = getFeeConfig();
+  const amountNaira =
+    student.roleType === 'executive' ? config.executiveAmountNaira : config.regularAmountNaira;
+  const categoryTitle =
+    student.roleType === 'executive' ? config.executiveTitle : config.regularTitle;
+
+  const paidCount = transactions.filter((t) => t.status === 'success').length;
+  const nextReceiptNum = `FINSA-26-${String(101 + paidCount).padStart(5, '0')}`;
+  const verificationHash = `CU-FINSA-VERIFIED-${student.matricNumber}-${nextReceiptNum.slice(-5)}`;
+
+  const manualTx: TransactionRecord = {
+    id: `tx-man-${Date.now()}`,
+    reference: `FINSA-MAN-26-${Math.floor(100000 + Math.random() * 900000)}`,
+    receiptNumber: nextReceiptNum,
+    verificationHash,
+    studentId: student.id,
+    matricNumber: student.matricNumber,
+    studentName: student.fullName,
+    email: student.email,
+    level: student.level,
+    roleType: student.roleType,
+    executiveTitle: student.executiveTitle,
+    categoryTitle,
+    amountNaira,
+    paymentRail: 'manual_admin',
+    status: 'success',
+    createdAt: new Date().toISOString(),
+    verifiedAt: new Date().toISOString(),
+    verifiedBy: `${actor} (Direct Manual Clearance)`,
+  };
+
+  const nextTxs = [manualTx, ...transactions];
+  if (isBrowser()) {
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(nextTxs));
+    addAuditLog(
+      actor,
+      'MANUAL_CLEARANCE_ISSUED',
+      `Issued direct departmental clearance ${nextReceiptNum} for ${student.fullName} (${student.matricNumber})`
+    );
+  }
+  return manualTx;
+}
+
+export function resetStudentsToRosterSeed(actor = 'Department Admin'): StudentRecord[] {
+  if (isBrowser()) {
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(OFFICIAL_ROSTER_SEED));
+    addAuditLog(
+      actor,
+      'ROSTER_RESET_TO_SEED',
+      `Restored official roster seed (${OFFICIAL_ROSTER_SEED.length} registered students)`
+    );
+  }
+  return OFFICIAL_ROSTER_SEED;
+}
+
 
