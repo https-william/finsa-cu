@@ -73,6 +73,8 @@ export default function VerifyReceiptPage() {
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#717875]"
               />
               <input
+                id="verify-receipt-input"
+                name="receiptCode"
                 type="text"
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value.toUpperCase())}

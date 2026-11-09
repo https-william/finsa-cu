@@ -632,6 +632,8 @@ export default function AdminDashboardPage() {
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#717875]"
               />
               <input
+                id="admin-search-input"
+                name="adminSearch"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -642,6 +644,8 @@ export default function AdminDashboardPage() {
 
             <div className="lg:col-span-2">
               <select
+                id="admin-level-filter"
+                name="adminLevelFilter"
                 aria-label="Filter by Level"
                 value={levelFilter}
                 onChange={(e) => setLevelFilter(e.target.value)}
@@ -658,6 +662,8 @@ export default function AdminDashboardPage() {
 
             <div className="lg:col-span-2">
               <select
+                id="admin-role-filter"
+                name="adminRoleFilter"
                 aria-label="Filter by Classification"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -671,6 +677,8 @@ export default function AdminDashboardPage() {
 
             <div className="lg:col-span-3">
               <select
+                id="admin-status-filter"
+                name="adminStatusFilter"
                 aria-label="Filter by Payment Status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
