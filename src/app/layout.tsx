@@ -14,13 +14,13 @@ export const metadata: Metadata = {
     'Department of Banking and Finance',
     'FINSA',
     'Course Dues',
-    'Test 1 Clearance',
+    'Departmental Clearance',
     'Financial Clearance Portal',
   ],
   openGraph: {
     title: 'FINSA Online · Department of Banking & Finance | Covenant University',
     description:
-      'Official Course Dues & Test 1 Clearance Portal for Covenant University Finance Students.',
+      'Official Course Dues & Financial Clearance Portal for Covenant University Finance Students.',
     url: 'https://finsa-covenant.vercel.app',
     siteName: 'FINSA Online',
     locale: 'en_NG',

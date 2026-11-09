@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS payment_categories (
 -- Seed initial Course Dues (Regular: N10,000 | Executive: N15,000)
 INSERT INTO payment_categories (slug, title, description, amount_naira, target_role, is_mandatory, is_active, academic_session)
 VALUES
-  ('finsa-dues-regular-2026', 'FINSA Course & Departmental Dues (Regular)', 'Mandatory 2026/2027 Academic Session Course Dues required for Test 1 & Examination Clearance.', 10000, 'regular', true, true, '2026/2027'),
-  ('finsa-dues-executive-2026', 'FINSA Executive Council & Course Dues', 'Mandatory 2026/2027 Academic Session Course & Executive Council Dues required for Test 1 Clearance.', 15000, 'executive', true, true, '2026/2027')
+  ('finsa-dues-regular-2026', 'FINSA Course & Departmental Dues (Regular)', 'Mandatory 2026/2027 Academic Session Course Dues required for Departmental & Examination Clearance.', 10000, 'regular', true, true, '2026/2027'),
+  ('finsa-dues-executive-2026', 'FINSA Executive Council & Course Dues', 'Mandatory 2026/2027 Academic Session Course & Executive Council Dues required for Departmental Clearance.', 15000, 'executive', true, true, '2026/2027')
 ON CONFLICT (slug) DO NOTHING;
 
 -- 3. transactions (Verified gateway payments + Manual transfer fallback)

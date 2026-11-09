@@ -77,16 +77,16 @@ export const INITIAL_FEE_CONFIG: FeeConfig = {
   regularTitle: 'FINSA Departmental Course Dues (Regular)',
   executiveTitle: 'FINSA Executive Council & Course Dues',
   regularDescription:
-    'Mandatory 2026/2027 Academic Session Course Dues required for Test 1 & Examination Clearance.',
+    'Mandatory 2026/2027 Academic Session Departmental & Course Dues required for financial clearance.',
   executiveDescription:
-    'Mandatory 2026/2027 Academic Session Course & Executive Council Dues required for Test 1 Clearance.',
+    'Mandatory 2026/2027 Academic Session Course & Executive Council Dues required for financial clearance.',
   enablePaystackRail: true,
   enableBankTransferRail: true,
   departmentalBankName: 'Covenant Microfinance Bank / Zenith Bank',
   departmentalAccountNumber: '1024891042',
   departmentalAccountName: 'CU FINSA - Dept of Banking & Finance',
-  clearanceDeadlineLabel: 'Tuesday, Nov 10 · Before Test 1 Sitting',
-  updatedAt: new Date().toISOString(),
+  clearanceDeadlineLabel: 'Official Departmental Financial Clearance',
+  updatedAt: '2026-11-06T12:00:00.000Z',
 };
 
 export const SEEDED_STUDENTS: StudentRecord[] = [
