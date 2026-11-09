@@ -278,27 +278,24 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-between bg-[#FAFAFC] text-[#0A0D0C]">
-      {/* Floating Translucent Pill Navigation (Apple-grade) */}
-      <header className="sticky top-0 z-40 pt-4 px-4">
-        <nav
-          aria-label="Admin Navigation"
-          className="max-w-7xl mx-auto h-14 px-5 rounded-full bg-white/80 backdrop-blur-xl border border-black/[0.06] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] flex items-center justify-between gap-4"
-        >
+    <div className="min-h-[100dvh] flex flex-col justify-between bg-[#FAFAFA] text-[#09090B]">
+      {/* Precision Navbar */}
+      <header className="border-b border-zinc-200 bg-white sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto h-14 px-4 sm:px-6 flex items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="w-8 h-8 rounded-full bg-[#F5F5F3] border border-black/10 flex items-center justify-center text-[#0A0D0C] hover:bg-[#064E3B] hover:text-white transition-all duration-150 active:scale-[0.97]"
+              className="p-1.5 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition-colors"
               title="Return to Student Portal"
             >
               <ArrowLeft size={15} />
             </Link>
             <div>
-              <span className="font-serif-title font-bold text-base tracking-tight text-[#09120E] block">
-                FINSA Financial Command Center
+              <span className="font-semibold text-sm tracking-tight text-zinc-950 block">
+                FINSA Administration &amp; Reconciliation
               </span>
-              <span className="text-[10px] font-mono text-[#53645E] hidden sm:block">
-                Department of Banking &amp; Finance · Master Ledger &amp; Treasury Reconciliation
+              <span className="text-[11px] text-zinc-500 hidden sm:block">
+                Department of Banking &amp; Finance · Master Ledger &amp; Fee Management
               </span>
             </div>
           </div>
@@ -307,16 +304,16 @@ export default function AdminDashboardPage() {
             <button
               type="button"
               onClick={() => setShowSettings((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 active:scale-[0.97] cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
                 showSettings
-                  ? 'bg-[#064E3B] text-white border-[#064E3B]'
-                  : 'bg-white text-[#0A0D0C] border-black/10 hover:bg-[#F5F5F3]'
+                  ? 'bg-zinc-900 text-white border-zinc-900'
+                  : 'bg-white text-zinc-800 border-zinc-200 hover:bg-zinc-50'
               }`}
             >
               <SlidersHorizontal size={14} />
-              <span className="hidden sm:inline">Configure Dues</span>
-              <span className="sm:hidden">Dues</span>
-              <span className="text-[10px] opacity-75 font-mono">
+              <span className="hidden sm:inline">Fee Settings</span>
+              <span className="sm:hidden">Fees</span>
+              <span className="text-[11px] font-mono text-zinc-400">
                 (₦{(feeConfig.regularAmountNaira / 1000)}k/₦{(feeConfig.executiveAmountNaira / 1000)}k)
               </span>
             </button>
@@ -324,16 +321,14 @@ export default function AdminDashboardPage() {
             <button
               type="button"
               onClick={() => downloadSpreadsheet('by_level')}
-              className="group inline-flex items-center gap-2 rounded-full bg-[#0A0D0C] text-white pl-3.5 pr-2 py-1.5 text-xs font-medium hover:bg-[#064E3B] transition-all duration-150 active:scale-[0.97] cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-950 text-white px-3 py-1.5 text-xs font-medium hover:bg-zinc-800 transition-colors cursor-pointer"
             >
+              <DownloadSimple size={14} />
               <span className="hidden sm:inline">Export Master (.CSV)</span>
               <span className="sm:hidden">Export</span>
-              <span className="w-5 h-5 rounded-full bg-white/15 flex items-center justify-center">
-                <DownloadSimple size={12} />
-              </span>
             </button>
           </div>
-        </nav>
+        </div>
       </header>
 
       <main className="max-w-7xl w-full mx-auto px-4 pt-6 pb-20 space-y-6">
@@ -491,77 +486,77 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* 4-Card Executive Metrics Grid (Apple-grade surface cards) */}
+        {/* 4 Executive Metrics Cards */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
-          {/* Card 1 (4 cols): Total Verified Revenue */}
-          <div className="lg:col-span-4 rounded-3xl bg-gradient-to-br from-[#04241B] to-[#063A2D] text-white border border-[#C5A059]/40 p-6 shadow-[0_10px_30px_rgba(4,36,27,0.3)] flex flex-col justify-between">
+          {/* Card 1: Total Verified Revenue */}
+          <div className="lg:col-span-4 rounded-xl bg-zinc-950 text-white p-5 border border-zinc-900 flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#E5C378] font-bold">
-                Verified Treasury Collections
+              <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">
+                Verified Collections
               </span>
-              <CurrencyNgn size={22} className="text-[#E5C378]" />
+              <CurrencyNgn size={18} className="text-zinc-400" />
             </div>
-            <div className="my-3">
-              <p className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-white font-tabular">
+            <div>
+              <p className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-white font-tabular">
                 {mounted ? formatNaira(metrics.totalRevenue) : '₦0'}
               </p>
             </div>
-            <div className="flex items-center justify-between text-xs font-mono text-emerald-100/90 pt-3 border-t border-[#C5A059]/20">
-              <span>Regular (₦{(feeConfig.regularAmountNaira / 1000)}k): {metrics.regularPaidCount}</span>
-              <span className="text-[#E5C378]">Exec (₦{(feeConfig.executiveAmountNaira / 1000)}k): {metrics.execPaidCount}</span>
+            <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pt-2.5 border-t border-zinc-800">
+              <span>Regular: {metrics.regularPaidCount}</span>
+              <span>Executive: {metrics.execPaidCount}</span>
             </div>
           </div>
 
-          {/* Card 2 (3 cols): Cleared Students */}
-          <div className="lg:col-span-3 rounded-3xl bg-white border border-black/[0.08] p-6 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          {/* Card 2: Cleared Students */}
+          <div className="lg:col-span-3 rounded-xl bg-white border border-zinc-200 p-5 flex flex-col justify-between space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#717875]">
+              <span className="text-xs font-mono uppercase tracking-wider text-zinc-500">
                 Financially Cleared
               </span>
-              <ShieldCheck size={20} weight="fill" className="text-[#064E3B]" />
+              <ShieldCheck size={18} weight="fill" className="text-emerald-700" />
             </div>
-            <div className="my-3">
-              <p className="text-3xl font-mono font-bold text-[#0A0D0C] font-tabular">
+            <div>
+              <p className="text-2xl font-mono font-bold text-zinc-950 font-tabular">
                 {metrics.paidCount}{' '}
-                <span className="text-sm font-normal text-[#717875]">
+                <span className="text-xs font-normal text-zinc-500">
                   / {students.length} on roster
                 </span>
               </p>
             </div>
-            <p className="text-xs text-[#525856]">
-              {metrics.outstandingCount} students have dues outstanding
+            <p className="text-xs text-zinc-500">
+              {metrics.outstandingCount} students pending payment
             </p>
           </div>
 
-          {/* Card 3 (2 cols): Pending Approvals */}
-          <div className="lg:col-span-2 rounded-3xl bg-white border border-black/[0.08] p-6 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          {/* Card 3: Pending Approvals */}
+          <div className="lg:col-span-2 rounded-xl bg-white border border-zinc-200 p-5 flex flex-col justify-between space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#B45309]">
+              <span className="text-xs font-mono uppercase tracking-wider text-amber-700">
                 Pending Queue
               </span>
-              <Clock size={20} weight="fill" className="text-[#B45309]" />
+              <Clock size={18} weight="fill" className="text-amber-700" />
             </div>
-            <div className="my-3">
-              <p className="text-3xl font-mono font-bold text-[#0A0D0C] font-tabular">
+            <div>
+              <p className="text-2xl font-mono font-bold text-zinc-950 font-tabular">
                 {metrics.pendingCount}
               </p>
             </div>
-            <p className="text-xs text-[#717875]">Awaiting 1-click verification</p>
+            <p className="text-xs text-zinc-500">Bank transfers to review</p>
           </div>
 
-          {/* Card 4 (3 cols): Level Breakdown */}
-          <div className="lg:col-span-3 rounded-3xl bg-white border border-black/[0.08] p-5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between space-y-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#717875]">
+          {/* Card 4: Level Breakdown */}
+          <div className="lg:col-span-3 rounded-xl bg-white border border-zinc-200 p-4 flex flex-col justify-between space-y-2 shadow-xs">
+            <span className="text-xs font-mono uppercase tracking-wider text-zinc-500">
               Clearance by Level
             </span>
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
               {(['100L', '200L', '300L', '400L'] as AcademicLevel[]).map((lvl) => (
                 <div
                   key={lvl}
-                  className="p-2.5 rounded-xl bg-[#F7F7F6] border border-black/[0.05] flex items-center justify-between"
+                  className="p-2 rounded-lg bg-zinc-50 border border-zinc-200/80 flex items-center justify-between"
                 >
-                  <span className="font-semibold text-[#0A0D0C]">{lvl}</span>
-                  <span className="text-[#064E3B] font-bold">
+                  <span className="font-semibold text-zinc-900">{lvl}</span>
+                  <span className="text-emerald-800 font-bold">
                     {metrics.byLevel[lvl].paid} paid
                   </span>
                 </div>

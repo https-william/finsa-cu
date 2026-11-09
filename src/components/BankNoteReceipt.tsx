@@ -3,20 +3,17 @@
 import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  ShieldCheck,
   Printer,
   Copy,
   Check,
-  SealCheck,
+  CheckCircle,
   ArrowUpRight,
-  Sparkle,
 } from '@phosphor-icons/react';
 import { TransactionRecord, formatNaira } from '@/lib/ledger-store';
 import Link from 'next/link';
 
 interface BankNoteReceiptProps {
   transaction: TransactionRecord;
-  compact?: boolean;
 }
 
 function formatDeterministicTimestamp(iso: string): string {
@@ -34,7 +31,7 @@ function formatDeterministicTimestamp(iso: string): string {
   return `${day} ${month} ${year} · ${hours}:${mins} GMT`;
 }
 
-export function BankNoteReceipt({ transaction, compact = false }: BankNoteReceiptProps) {
+export function BankNoteReceipt({ transaction }: BankNoteReceiptProps) {
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState('https://finsa-covenant.vercel.app');
 
@@ -60,166 +57,126 @@ export function BankNoteReceipt({ transaction, compact = false }: BankNoteReceip
 
   return (
     <div className="w-full max-w-xl mx-auto print-only-receipt">
-      {/* Credential Outer Shell — Sovereign Banknote Enclosure */}
-      <div className="relative rounded-3xl bg-white border border-[#C5A059]/40 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.08)] overflow-hidden transition-all">
-        {/* Decorative Security Guilloche Micro-Strip (Gold to Emerald) */}
-        <div className="h-2 w-full bg-gradient-to-r from-[#04241B] via-[#C5A059] to-[#04241B]" />
-
-        {/* Credential Header */}
-        <div className="px-7 pt-7 pb-5 border-b border-black/[0.06] flex items-start justify-between gap-4 bg-gradient-to-b from-[#FDFDFC] to-white">
+      {/* Precision Document Enclosure */}
+      <div className="rounded-xl bg-white border border-zinc-200 shadow-xs overflow-hidden">
+        {/* Certificate Header */}
+        <div className="p-6 border-b border-zinc-100 flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-pulse" />
-              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#53645E]">
-                Covenant University · CMSS
-              </p>
-            </div>
-            <h2 className="font-serif-title text-xl md:text-2xl font-bold tracking-tight text-[#09120E]">
+            <p className="text-[11px] font-mono uppercase tracking-wider text-zinc-500">
+              Covenant University · CMSS
+            </p>
+            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-950">
               Department of Banking &amp; Finance
             </h2>
-            <p className="text-xs text-[#53645E]">
-              Official Financial Clearance Credential · FINSA Treasury
+            <p className="text-xs text-zinc-500">
+              Official Course Dues &amp; Clearance Certificate
             </p>
           </div>
 
-          <div className="shrink-0 text-right">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-[#C5A059] to-[#D4AF37] text-[#04241B] text-[11px] font-mono font-bold shadow-xs">
-              <SealCheck size={14} weight="fill" />
-              VERIFIED
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+            <CheckCircle size={14} weight="fill" className="text-emerald-700" />
+            <span>CLEARED</span>
+          </span>
         </div>
 
-        {/* Credential Body */}
-        <div className="p-7 space-y-6">
-          {/* Student Profile Card (Embossed look) */}
-          <div className="p-5 rounded-2xl bg-[#FBFBFA] border border-black/[0.05] space-y-4">
+        {/* Certificate Body */}
+        <div className="p-6 space-y-5 text-xs">
+          {/* Identity Table Grid */}
+          <div className="grid grid-cols-2 gap-4 pb-4 border-b border-zinc-100">
             <div>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#717875] block">
-                Student Name
-              </span>
-              <p className="text-base md:text-lg font-bold text-[#0A0D0C] mt-0.5 tracking-tight">
+              <span className="text-zinc-500 block text-[11px]">Student Name</span>
+              <p className="font-semibold text-zinc-950 text-sm mt-0.5">
                 {transaction.studentName}
               </p>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-black/[0.05]">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#717875] block">
-                  Matric Number
-                </span>
-                <p className="text-sm font-mono font-semibold text-[#0A0D0C] mt-0.5 font-tabular">
-                  {transaction.matricNumber}
-                </p>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#717875] block">
-                  Classification
-                </span>
-                <p className="text-sm font-medium text-[#0A0D0C] mt-0.5">
-                  {transaction.level} ·{' '}
-                  <span
-                    className={
-                      transaction.roleType === 'executive'
-                        ? 'text-[#064E3B] font-semibold'
-                        : 'text-[#525856]'
-                    }
-                  >
-                    {transaction.roleType === 'executive'
-                      ? `Executive (${transaction.executiveTitle || 'Council'})`
-                      : 'Regular'}
-                  </span>
-                </p>
-              </div>
+            <div>
+              <span className="text-zinc-500 block text-[11px]">Matriculation Number</span>
+              <p className="font-mono font-semibold text-zinc-950 text-sm mt-0.5 font-tabular">
+                {transaction.matricNumber}
+              </p>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[11px]">Academic Level &amp; Role</span>
+              <p className="text-zinc-800 font-medium mt-0.5">
+                {transaction.level} ·{' '}
+                {transaction.roleType === 'executive'
+                  ? `Executive (${transaction.executiveTitle || 'Council'})`
+                  : 'Regular'}
+              </p>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[11px]">Certificate / Receipt No.</span>
+              <p className="font-mono font-semibold text-zinc-950 mt-0.5">
+                {transaction.receiptNumber || 'PENDING'}
+              </p>
             </div>
           </div>
 
-          {/* Dues Assessment Ledger Row */}
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-[#064E3B]/[0.03] border border-[#064E3B]/15">
+          {/* Amount Row */}
+          <div className="flex items-center justify-between p-3.5 rounded-lg bg-zinc-50 border border-zinc-200/80">
             <div>
-              <p className="text-xs font-semibold text-[#0A0D0C]">
-                {transaction.categoryTitle}
-              </p>
-              <p className="text-[11px] font-mono text-[#525856] mt-0.5">
-                Receipt No: <strong className="text-[#0A0D0C]">{transaction.receiptNumber || 'PENDING'}</strong>
+              <p className="font-medium text-zinc-900">{transaction.categoryTitle}</p>
+              <p className="text-zinc-500 text-[11px] font-mono mt-0.5">
+                Settled via {transaction.paymentRail.toUpperCase()} · Ref: {transaction.reference}
               </p>
             </div>
             <div className="text-right">
-              <span className="text-[10px] font-mono text-[#064E3B] block uppercase tracking-wider">
-                Amount Cleared
-              </span>
-              <span className="text-xl font-mono font-bold text-[#064E3B] font-tabular">
+              <span className="text-base font-mono font-bold text-zinc-950 font-tabular">
                 {formatNaira(transaction.amountNaira)}
               </span>
             </div>
           </div>
 
-          {/* Verification QR & Metadata Footer */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 pt-2">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-white rounded-xl border border-black/10 shrink-0 shadow-xs">
+          {/* Verification Barcode & Signature Metadata */}
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <div className="flex items-center gap-3.5">
+              <div className="p-1.5 bg-white rounded-lg border border-zinc-200 shrink-0">
                 <QRCodeSVG
                   value={verificationUrl}
-                  size={76}
+                  size={64}
                   bgColor="#FFFFFF"
-                  fgColor="#0A0D0C"
+                  fgColor="#09090B"
                   level="M"
                 />
               </div>
-              <div className="space-y-0.5">
-                <span className="text-xs font-semibold text-[#0A0D0C] flex items-center gap-1.5">
-                  <ShieldCheck size={15} weight="fill" className="text-[#064E3B]" />
-                  Cryptographic Verification
-                </span>
-                <p className="text-[11px] text-[#525856] max-w-[220px] leading-relaxed">
-                  Scan at any departmental clearance checkpoint to verify authenticity.
-                </p>
-                <p className="text-[10px] font-mono text-[#717875] pt-1">
-                  Issued: {formattedDate}
-                </p>
+              <div className="space-y-0.5 text-[11px]">
+                <p className="font-medium text-zinc-900">Cryptographically Signed</p>
+                <p className="text-zinc-500">Scan QR code at examination checkpoints to verify.</p>
+                <p className="text-zinc-400 font-mono">Issued: {formattedDate}</p>
               </div>
             </div>
 
-            <div className="text-left sm:text-right w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-black/[0.06]">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#717875] block">
-                Authorized By
-              </span>
-              <p className="text-xs font-semibold text-[#0A0D0C] mt-0.5">
-                Office of the HOD &amp; Exco
-              </p>
-              <p className="text-[10px] text-[#525856]">
-                Department of Banking &amp; Finance
-              </p>
+            <div className="text-right text-[11px] text-zinc-500 hidden sm:block shrink-0">
+              <p className="font-medium text-zinc-800">Office of the HOD</p>
+              <p>Dept. of Banking &amp; Finance</p>
             </div>
           </div>
 
-          {/* Actions Strip (Hidden when printing) */}
-          <div className="no-print pt-3 border-t border-black/[0.06] flex flex-wrap items-center justify-between gap-3">
+          {/* Actions Bar (Screen Only) */}
+          <div className="no-print pt-4 border-t border-zinc-100 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={handlePrintPdf}
-              className="inline-flex items-center gap-2 rounded-full bg-[#04241B] text-[#E5C378] px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider transition-all duration-150 active:scale-[0.97] hover:bg-[#063A2D] cursor-pointer shadow-sm"
+              className="inline-flex items-center gap-2 rounded-lg bg-zinc-950 text-white px-4 py-2 text-xs font-medium hover:bg-zinc-800 transition-colors cursor-pointer"
             >
-              <Printer size={15} weight="bold" />
-              <span>Download / Print Credential</span>
+              <Printer size={15} />
+              <span>Print / Save as PDF</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 font-mono text-xs">
               <button
                 type="button"
                 onClick={handleCopyRef}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[#F5F5F3] hover:bg-black/[0.06] text-xs font-mono text-[#0A0D0C] transition-colors cursor-pointer"
-                title="Copy Receipt Number"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition-colors cursor-pointer"
               >
-                {copied ? <Check size={13} className="text-[#064E3B]" /> : <Copy size={13} />}
-                <span>{copied ? 'Copied' : transaction.receiptNumber || 'Copy No.'}</span>
+                {copied ? <Check size={13} className="text-emerald-700" /> : <Copy size={13} />}
+                <span>{copied ? 'Copied' : transaction.receiptNumber || 'Copy Ref'}</span>
               </button>
 
               {transaction.receiptNumber && (
                 <Link
                   href={`/verify/${transaction.receiptNumber}`}
-                  className="inline-flex items-center gap-1 text-xs font-mono text-[#064E3B] hover:underline px-2 py-1"
+                  className="inline-flex items-center gap-1 text-zinc-900 hover:underline px-2 py-1"
                 >
                   <span>Verify</span>
                   <ArrowUpRight size={13} />

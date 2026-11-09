@@ -84,7 +84,7 @@ export default function VerifyReceiptPage() {
             </div>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-[#04241B] text-[#E5C378] text-xs font-mono uppercase tracking-wider font-bold hover:bg-[#064E3B] transition-transform duration-150 active:scale-[0.97] cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               Verify
             </button>
@@ -94,23 +94,21 @@ export default function VerifyReceiptPage() {
         {/* Verification Status Banner */}
         {checked && matchedTx && matchedTx.status === 'success' && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="no-print p-6 rounded-3xl bg-gradient-to-r from-[#04241B] to-[#063A2D] border border-[#C5A059]/40 text-white flex items-center justify-between gap-4 shadow-lg">
+            <div className="no-print p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#C5A059]/20 border border-[#C5A059]/30 flex items-center justify-center shrink-0">
-                  <ShieldCheck size={28} weight="fill" className="text-[#E5C378]" />
-                </div>
+                <ShieldCheck size={24} weight="fill" className="text-emerald-700 shrink-0" />
                 <div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-[#E5C378] block font-bold">
-                    Authentic Credential
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-700 block font-semibold">
+                    Official Verification Ledger
                   </span>
-                  <h1 className="font-serif-title text-lg sm:text-xl font-bold tracking-tight text-white">
-                    FINANCIALLY CLEARED
+                  <h1 className="text-sm font-semibold tracking-tight text-emerald-950">
+                    Financially Cleared for 2026/2027 Session
                   </h1>
                 </div>
               </div>
               <div className="text-right">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5C378] block">VERIFIED</span>
-                <span className="text-xl font-mono font-bold text-white font-tabular">
+                <span className="text-[10px] font-mono text-emerald-600 block">AMOUNT</span>
+                <span className="text-base font-mono font-bold text-emerald-950 font-tabular">
                   {formatNaira(matchedTx.amountNaira)}
                 </span>
               </div>
