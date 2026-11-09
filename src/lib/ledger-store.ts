@@ -68,6 +68,7 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'finsa_online_transactions_v1',
   FEE_CONFIG: 'finsa_online_fee_config_v1',
   AUDIT_LOGS: 'finsa_online_audit_logs_v1',
+  SESSION_STUDENT: 'finsa_online_session_student_v1',
 };
 
 export const INITIAL_FEE_CONFIG: FeeConfig = {
@@ -699,3 +700,82 @@ export function rejectBankTransfer(txId: string, adminActor = 'Financial Secreta
   }
   return rejected;
 }
+
+export function getActiveSessionStudent(): StudentRecord | null {
+  if (!isBrowser()) return null;
+  const raw = localStorage.getItem(STORAGE_KEYS.SESSION_STUDENT);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StudentRecord;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveSessionStudent(student: StudentRecord | null): void {
+  if (!isBrowser()) return;
+  if (!student) {
+    localStorage.removeItem(STORAGE_KEYS.SESSION_STUDENT);
+  } else {
+    localStorage.setItem(STORAGE_KEYS.SESSION_STUDENT, JSON.stringify(student));
+  }
+}
+
+export function authenticateStudent(
+  matric: string,
+  password: string
+): { success: boolean; student?: StudentRecord; error?: string } {
+  const cleanMatric = normalizeMatric(matric);
+  if (!cleanMatric || cleanMatric.length < 5) {
+    return {
+      success: false,
+      error: 'Please enter a valid matriculation number (e.g. 22AG031140).',
+    };
+  }
+
+  const cleanPass = (password || '').trim();
+  if (!cleanPass) {
+    return {
+      success: false,
+      error: 'Please enter your password (default: finsaonline).',
+    };
+  }
+
+  // Permissive default password checking for student portal convenience
+  const allowedDefaults = ['finsaonline', 'finsa2026', 'covenant', 'password', '123456'];
+  const passLower = cleanPass.toLowerCase();
+  if (!allowedDefaults.includes(passLower) && cleanPass.length < 4) {
+    return {
+      success: false,
+      error: 'Invalid password. Try the default: finsaonline',
+    };
+  }
+
+  const students = getStudents();
+  let student = students.find((s: StudentRecord) => normalizeMatric(s.matricNumber) === cleanMatric);
+
+  if (!student) {
+    // Dynamically provision new student record based on matriculation year
+    let inferredLevel: AcademicLevel = '400L';
+    if (cleanMatric.startsWith('25')) inferredLevel = '100L';
+    else if (cleanMatric.startsWith('24')) inferredLevel = '200L';
+    else if (cleanMatric.startsWith('23')) inferredLevel = '300L';
+    else if (cleanMatric.startsWith('22')) inferredLevel = '400L';
+
+    student = upsertStudent({
+      matricNumber: cleanMatric,
+      fullName: `Student ${cleanMatric}`,
+      email: `${cleanMatric.toLowerCase()}@stu.cu.edu.ng`,
+      level: inferredLevel,
+      roleType: 'regular',
+    });
+  }
+
+  setActiveSessionStudent(student);
+  return { success: true, student };
+}
+
+export function getSampleDemoStudents(): StudentRecord[] {
+  return getStudents();
+}
+
