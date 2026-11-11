@@ -78,7 +78,7 @@ export default function VerifyReceiptPage() {
                 type="text"
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value.toUpperCase())}
-                placeholder="Receipt No (e.g. FINSA-26-00101) or Matric No"
+                placeholder="Receipt No (e.g. FINSA-26-00101), Reg No (e.g. 2601001), or Matric No"
                 className="w-full pl-10 pr-3 py-2 rounded-xl bg-transparent font-mono text-xs sm:text-sm text-[#0A0D0C] uppercase focus:outline-none"
               />
             </div>

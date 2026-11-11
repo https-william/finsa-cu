@@ -90,9 +90,11 @@ export function BankNoteReceipt({ transaction }: BankNoteReceiptProps) {
               </p>
             </div>
             <div>
-              <span className="text-zinc-500 block text-[11px]">Matriculation Number</span>
+              <span className="text-zinc-500 block text-[11px]">
+                {transaction.matricNumber ? 'Matriculation Number' : 'Registration Number (100L)'}
+              </span>
               <p className="font-mono font-semibold text-zinc-950 text-sm mt-0.5 font-tabular">
-                {transaction.matricNumber}
+                {transaction.matricNumber || transaction.regNo || 'PENDING'}
               </p>
             </div>
             <div>

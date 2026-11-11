@@ -1,4 +1,9 @@
 import { OFFICIAL_ROSTER_SEED } from './student-roster-data';
+import {
+  syncStudentToSupabase,
+  syncTransactionToSupabase,
+  syncAuditLogToSupabase,
+} from './supabase';
 
 export type AcademicLevel = '100L' | '200L' | '300L' | '400L' | 'Postgrad';
 export type StudentRoleType = 'regular' | 'executive';
@@ -7,13 +12,13 @@ export type TransactionStatus = 'pending' | 'pending_verification' | 'success' |
 
 export interface StudentRecord {
   id: string;
-  matricNumber: string; // e.g. '22AG031042'
-  regNo?: string; // e.g. '2502080' or '2300842'
+  matricNumber?: string; // Optional for 100L freshmen (no matric yet) e.g. '22AG031042'
+  regNo: string;         // Mandatory 7-digit Covenant Reg No e.g. '2601001', '2502080'
   fullName: string;
   email: string;
   level: AcademicLevel;
   roleType: StudentRoleType;
-  course?: string; // 'Finance' | 'FinTech' | 'Banking & Finance'
+  course?: string;       // 'Finance' | 'FinTech' | 'Banking & Finance'
   executiveTitle?: string;
   isRosterVerified: boolean;
   createdAt: string;
@@ -42,7 +47,8 @@ export interface TransactionRecord {
   receiptNumber?: string; // e.g. 'FINSA-26-00104' (assigned ONLY when status === 'success')
   verificationHash?: string; // Cryptographic hash for QR verification
   studentId: string;
-  matricNumber: string;
+  regNo?: string;
+  matricNumber?: string;
   studentName: string;
   email: string;
   level: AcademicLevel;
@@ -52,8 +58,14 @@ export interface TransactionRecord {
   amountNaira: number;
   paymentRail: PaymentRail;
   status: TransactionStatus;
-  transferSenderBank?: string;
-  transferSessionId?: string;
+  
+  // Anti-fraud Bank Transfer verification dossier
+  transferSenderName?: string;        // Exact account name on transfer alert
+  transferSenderBank?: string;        // e.g. GTBank, Zenith, Access, Kuda
+  transferSessionId?: string;         // Unique 12-30 digit NIP session ID
+  transferPayerRelationship?: string; // 'self' | 'parent' | 'sponsor' | 'other'
+  transferDate?: string;
+  
   createdAt: string;
   verifiedAt?: string;
   verifiedBy?: string;
@@ -68,11 +80,11 @@ export interface AuditLogEntry {
 }
 
 const STORAGE_KEYS = {
-  STUDENTS: 'finsa_online_students_v1',
-  TRANSACTIONS: 'finsa_online_transactions_v1',
-  FEE_CONFIG: 'finsa_online_fee_config_v1',
-  AUDIT_LOGS: 'finsa_online_audit_logs_v1',
-  SESSION_STUDENT: 'finsa_online_session_student_v1',
+  STUDENTS: 'finsa_online_students_v2',
+  TRANSACTIONS: 'finsa_online_transactions_v2',
+  FEE_CONFIG: 'finsa_online_fee_config_v2',
+  AUDIT_LOGS: 'finsa_online_audit_logs_v2',
+  SESSION_STUDENT: 'finsa_online_session_student_v2',
 };
 
 export const INITIAL_FEE_CONFIG: FeeConfig = {
@@ -102,7 +114,8 @@ export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
     reference: 'FINSA-TX-26-904182',
     receiptNumber: 'FINSA-26-00101',
     verificationHash: 'CU-FINSA-VERIFIED-22AG031042-00101',
-    studentId: 'stu-01',
+    studentId: 'stu-exec-01',
+    regNo: '2201042',
     matricNumber: '22AG031042',
     studentName: 'Adeyemi Oluwatobiloba David',
     email: 'tobiloba.adeyemi@stu.cu.edu.ng',
@@ -119,10 +132,11 @@ export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
   },
   {
     id: 'tx-1002',
-    reference: 'FINSA-TX-26-904219',
+    reference: 'FINSA-TX-26-904210',
     receiptNumber: 'FINSA-26-00102',
     verificationHash: 'CU-FINSA-VERIFIED-22AG031089-00102',
-    studentId: 'stu-02',
+    studentId: 'stu-exec-02',
+    regNo: '2201089',
     matricNumber: '22AG031089',
     studentName: 'Chukwuemeka Chidinma Claire',
     email: 'chidinma.chukwuemeka@stu.cu.edu.ng',
@@ -133,39 +147,47 @@ export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
     amountNaira: 15000,
     paymentRail: 'paystack',
     status: 'success',
-    createdAt: '2026-11-06T15:10:04.000Z',
-    verifiedAt: '2026-11-06T15:10:09.000Z',
+    createdAt: '2026-11-06T15:05:00.000Z',
+    verifiedAt: '2026-11-06T15:05:08.000Z',
     verifiedBy: 'Paystack Webhook (HMAC-SHA512)',
   },
   {
     id: 'tx-1003',
-    reference: 'FINSA-TX-26-904501',
+    reference: 'FINSA-TX-26-904344',
     receiptNumber: 'FINSA-26-00103',
-    verificationHash: 'CU-FINSA-VERIFIED-23AG033512-00103',
-    studentId: 'stu-04',
-    matricNumber: '23AG033512',
-    studentName: 'Bello Moyosoreoluwa Zainab',
-    email: 'moyosore.bello@stu.cu.edu.ng',
-    level: '300L',
-    roleType: 'regular',
-    categoryTitle: 'FINSA Departmental Course Dues (Regular)',
-    amountNaira: 10000,
-    paymentRail: 'paystack',
+    verificationHash: 'CU-FINSA-VERIFIED-23AG033418-00103',
+    studentId: 'stu-exec-03',
+    regNo: '2303418',
+    matricNumber: '23AG033418',
+    studentName: 'Ogunleye Inioluwa Emmanuel',
+    email: 'inioluwa.ogunleye@stu.cu.edu.ng',
+    level: '400L',
+    roleType: 'executive',
+    executiveTitle: 'General Secretary',
+    categoryTitle: 'FINSA Executive Council & Course Dues',
+    amountNaira: 15000,
+    paymentRail: 'bank_transfer',
     status: 'success',
-    createdAt: '2026-11-07T08:45:12.000Z',
-    verifiedAt: '2026-11-07T08:45:19.000Z',
-    verifiedBy: 'Paystack Webhook (HMAC-SHA512)',
+    transferSenderName: 'Inioluwa Emmanuel Ogunleye',
+    transferSenderBank: 'Zenith Bank',
+    transferSessionId: '000015261106161044910284758291',
+    transferPayerRelationship: 'self',
+    transferDate: '2026-11-06T16:00:00.000Z',
+    createdAt: '2026-11-06T16:10:00.000Z',
+    verifiedAt: '2026-11-06T16:30:00.000Z',
+    verifiedBy: 'Financial Secretary (Manual Reconciliation)',
   },
   {
     id: 'tx-1004',
-    reference: 'FINSA-TX-26-904688',
+    reference: 'FINSA-TX-26-904551',
     receiptNumber: 'FINSA-26-00104',
     verificationHash: 'CU-FINSA-VERIFIED-24AG035109-00104',
-    studentId: 'stu-05',
+    studentId: 'stu-reg-02',
+    regNo: '2405109',
     matricNumber: '24AG035109',
     studentName: 'Nwosu Kamsiyochukwu Daniel',
     email: 'kamsi.nwosu@stu.cu.edu.ng',
-    level: '200L',
+    level: '300L',
     roleType: 'regular',
     categoryTitle: 'FINSA Departmental Course Dues (Regular)',
     amountNaira: 10000,
@@ -177,20 +199,24 @@ export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
   },
   {
     id: 'tx-1005',
-    reference: 'FINSA-TX-26-904810',
-    studentId: 'stu-06',
+    reference: 'FINSA-TRF-26-904810',
+    studentId: 'stu-exec-04',
+    regNo: '2405277',
     matricNumber: '24AG035277',
     studentName: 'Osagie Osahon Joshua',
     email: 'osahon.osagie@stu.cu.edu.ng',
-    level: '200L',
+    level: '300L',
     roleType: 'executive',
     executiveTitle: 'Assistant Welfare Director',
     categoryTitle: 'FINSA Executive Council & Course Dues',
     amountNaira: 15000,
     paymentRail: 'bank_transfer',
     status: 'pending_verification',
+    transferSenderName: 'Joshua Osahon Osagie',
     transferSenderBank: 'GTBank',
     transferSessionId: '000013261107113049201847291034',
+    transferPayerRelationship: 'self',
+    transferDate: '2026-11-07T11:25:00.000Z',
     createdAt: '2026-11-07T11:32:00.000Z',
   },
   {
@@ -198,11 +224,12 @@ export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
     reference: 'FINSA-TX-26-904955',
     receiptNumber: 'FINSA-26-00105',
     verificationHash: 'CU-FINSA-VERIFIED-25AG037804-00105',
-    studentId: 'stu-07',
-    matricNumber: '25AG037804',
-    studentName: 'Ezeife Munachimso Miracle',
-    email: 'munachimso.ezeife@stu.cu.edu.ng',
-    level: '100L',
+    studentId: 'stu-100-01',
+    regNo: '2502080',
+    matricNumber: '25AG032080',
+    studentName: 'Abdulsalam Idrees Adedotun',
+    email: 'idrees.abdulsalam@stu.cu.edu.ng',
+    level: '200L',
     roleType: 'regular',
     categoryTitle: 'FINSA Departmental Course Dues (Regular)',
     amountNaira: 10000,
@@ -212,14 +239,35 @@ export const SEEDED_TRANSACTIONS: TransactionRecord[] = [
     verifiedAt: '2026-11-07T12:04:15.000Z',
     verifiedBy: 'Paystack Webhook (HMAC-SHA512)',
   },
+  {
+    id: 'tx-1007',
+    reference: 'FINSA-TRF-26-905100',
+    studentId: 'stu-100-01',
+    regNo: '2601001',
+    matricNumber: '',
+    studentName: 'Adebayo Oluwatosin Daniel',
+    email: 'oluwatosin.adebayo@stu.cu.edu.ng',
+    level: '100L',
+    roleType: 'regular',
+    categoryTitle: 'FINSA Departmental Course Dues (Regular)',
+    amountNaira: 10000,
+    paymentRail: 'bank_transfer',
+    status: 'pending_verification',
+    transferSenderName: 'Mr. Olusegun Adebayo (Parent)',
+    transferSenderBank: 'Zenith Bank',
+    transferSessionId: '000021261108091522009817456321',
+    transferPayerRelationship: 'parent',
+    transferDate: '2026-11-08T09:10:00.000Z',
+    createdAt: '2026-11-08T09:15:22.000Z',
+  },
 ];
 
 export const SEEDED_AUDIT_LOGS: AuditLogEntry[] = [
   {
     id: 'aud-1',
     actor: 'System Architect',
-    action: 'FEE_STRUCTURE_LOCKED',
-    details: 'Set 2026/2027 Course Dues: Regular Students = ₦10,000 | Student Executives = ₦15,000',
+    action: 'COHORT_RECALIBRATION_APPLIED',
+    details: 'Recalibrated levels: 26xxxx (100L Freshmen with Reg No), 25xxxx (200L Sophomores), 24xxxx (300L Penultimate), 23xxxx (400L Final Year)',
     createdAt: '2026-11-06T12:00:00.000Z',
   },
   {
@@ -231,10 +279,17 @@ export const SEEDED_AUDIT_LOGS: AuditLogEntry[] = [
   },
   {
     id: 'aud-3',
-    actor: 'Paystack Webhook',
-    action: 'PAYMENT_VERIFIED',
-    details: 'Verified ₦10,000.00 from 25AG037804 (FINSA-26-00105)',
-    createdAt: '2026-11-07T12:04:15.000Z',
+    actor: 'Financial Secretary',
+    action: 'TRANSFER_APPROVED',
+    details: 'Approved ₦15,000.00 transfer for 23AG033418 (Zenith Bank NIP: 0000152611...) -> Issued FINSA-26-00103',
+    createdAt: '2026-11-06T16:30:00.000Z',
+  },
+  {
+    id: 'aud-4',
+    actor: 'Anti-Fraud Engine',
+    action: 'SECURITY_RULE_ACTIVE',
+    details: 'Enabled strict session ID uniqueness check and third-party payer attribution for bank transfers',
+    createdAt: '2026-11-07T08:00:00.000Z',
   },
 ];
 
@@ -242,9 +297,11 @@ function isBrowser() {
   return typeof window !== 'undefined';
 }
 
-export function normalizeMatric(input: string): string {
-  return input.trim().toUpperCase().replace(/\s+/g, '');
+export function normalizeIdentifier(input: string): string {
+  return (input || '').trim().toUpperCase().replace(/\s+/g, '');
 }
+
+export const normalizeMatric = normalizeIdentifier;
 
 export function formatNaira(amount: number): string {
   return new Intl.NumberFormat('en-NG', {
@@ -334,8 +391,6 @@ export function getAuditLogs(): AuditLogEntry[] {
 }
 
 export function addAuditLog(actor: string, action: string, details: string): void {
-  if (!isBrowser()) return;
-  const logs = getAuditLogs();
   const entry: AuditLogEntry = {
     id: `aud-${Date.now()}`,
     actor,
@@ -343,22 +398,50 @@ export function addAuditLog(actor: string, action: string, details: string): voi
     details,
     createdAt: new Date().toISOString(),
   };
-  localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([entry, ...logs]));
+  if (isBrowser()) {
+    const logs = getAuditLogs();
+    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([entry, ...logs]));
+  }
+  syncAuditLogToSupabase(entry);
 }
 
-export function lookupStudentByMatric(matricInput: string): {
+/**
+ * Universal lookup accepting either Registration Number OR Matriculation Number
+ */
+export function lookupStudentByMatric(identifierInput: string): {
   student: StudentRecord | null;
   paidTransaction: TransactionRecord | null;
   pendingTransaction: TransactionRecord | null;
   history: TransactionRecord[];
 } {
-  const matric = normalizeMatric(matricInput);
+  const clean = normalizeIdentifier(identifierInput);
+  if (!clean) {
+    return { student: null, paidTransaction: null, pendingTransaction: null, history: [] };
+  }
+
   const students = getStudents();
   const transactions = getTransactions();
 
-  const student = students.find((s) => normalizeMatric(s.matricNumber) === matric) || null;
+  const student =
+    students.find((s) => {
+      const sMatric = normalizeIdentifier(s.matricNumber || '');
+      const sReg = normalizeIdentifier(s.regNo || '');
+      return sMatric === clean || sReg === clean;
+    }) || null;
+
   const history = transactions
-    .filter((t) => normalizeMatric(t.matricNumber) === matric)
+    .filter((t) => {
+      const tMatric = normalizeIdentifier(t.matricNumber || '');
+      const tReg = normalizeIdentifier(t.regNo || '');
+      const sMatric = student ? normalizeIdentifier(student.matricNumber || '') : '';
+      const sReg = student ? normalizeIdentifier(student.regNo || '') : '';
+
+      return (
+        tMatric === clean ||
+        tReg === clean ||
+        (student && (t.studentId === student.id || (sMatric && tMatric === sMatric) || (sReg && tReg === sReg)))
+      );
+    })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const paidTransaction = history.find((t) => t.status === 'success') || null;
@@ -369,54 +452,70 @@ export function lookupStudentByMatric(matricInput: string): {
 }
 
 export function findReceiptByCode(receiptOrRef: string): TransactionRecord | null {
-  const clean = receiptOrRef.trim().toUpperCase();
+  const clean = normalizeIdentifier(receiptOrRef);
   const transactions = getTransactions();
   return (
     transactions.find(
       (t) =>
-        t.receiptNumber?.toUpperCase() === clean ||
-        t.reference.toUpperCase() === clean ||
-        t.verificationHash?.toUpperCase() === clean ||
-        t.matricNumber.toUpperCase() === clean
+        (t.receiptNumber && normalizeIdentifier(t.receiptNumber) === clean) ||
+        normalizeIdentifier(t.reference) === clean ||
+        (t.verificationHash && normalizeIdentifier(t.verificationHash) === clean) ||
+        (t.matricNumber && normalizeIdentifier(t.matricNumber) === clean) ||
+        (t.regNo && normalizeIdentifier(t.regNo) === clean) ||
+        (t.transferSessionId && normalizeIdentifier(t.transferSessionId) === clean)
     ) || null
   );
 }
 
 export function upsertStudent(data: {
-  matricNumber: string;
+  matricNumber?: string;
+  regNo: string;
   fullName: string;
   email: string;
   level: AcademicLevel;
   roleType: StudentRoleType;
+  course?: string;
   executiveTitle?: string;
 }): StudentRecord {
-  const matric = normalizeMatric(data.matricNumber);
+  const cleanReg = normalizeIdentifier(data.regNo);
+  const cleanMatric = data.matricNumber ? normalizeIdentifier(data.matricNumber) : '';
   const students = getStudents();
-  const existingIdx = students.findIndex((s) => normalizeMatric(s.matricNumber) === matric);
+
+  const existingIdx = students.findIndex(
+    (s) =>
+      (cleanReg && normalizeIdentifier(s.regNo) === cleanReg) ||
+      (cleanMatric && s.matricNumber && normalizeIdentifier(s.matricNumber) === cleanMatric)
+  );
 
   if (existingIdx >= 0) {
     const updated: StudentRecord = {
       ...students[existingIdx],
+      matricNumber: cleanMatric || students[existingIdx].matricNumber || '',
+      regNo: cleanReg || students[existingIdx].regNo,
       fullName: data.fullName.trim(),
       email: data.email.trim().toLowerCase(),
       level: data.level,
       roleType: data.roleType,
+      course: data.course || students[existingIdx].course || 'Finance',
       executiveTitle: data.roleType === 'executive' ? data.executiveTitle?.trim() : undefined,
     };
     students[existingIdx] = updated;
     if (isBrowser()) {
       localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
     }
+    syncStudentToSupabase(updated);
     return updated;
   }
 
   const created: StudentRecord = {
     id: `stu-${Date.now()}`,
-    matricNumber: matric,
+    matricNumber: cleanMatric,
+    regNo: cleanReg,
     fullName: data.fullName.trim(),
     email: data.email.trim().toLowerCase(),
     level: data.level,
     roleType: data.roleType,
+    course: data.course || 'Finance',
     executiveTitle: data.roleType === 'executive' ? data.executiveTitle?.trim() : undefined,
     isRosterVerified: false,
     createdAt: new Date().toISOString(),
@@ -426,6 +525,7 @@ export function upsertStudent(data: {
   if (isBrowser()) {
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(next));
   }
+  syncStudentToSupabase(created);
   return created;
 }
 
@@ -437,11 +537,15 @@ export function recordVerifiedPaystackPayment(params: {
   const config = getFeeConfig();
 
   // Idempotency check: if student already has a verified success receipt for this session, return it!
-  const existingPaid = transactions.find(
-    (t) =>
-      normalizeMatric(t.matricNumber) === normalizeMatric(params.student.matricNumber) &&
-      t.status === 'success'
-  );
+  const existingPaid = transactions.find((t) => {
+    const matchReg = t.regNo && normalizeIdentifier(t.regNo) === normalizeIdentifier(params.student.regNo);
+    const matchMatric =
+      params.student.matricNumber &&
+      t.matricNumber &&
+      normalizeIdentifier(t.matricNumber) === normalizeIdentifier(params.student.matricNumber);
+    return (matchReg || matchMatric) && t.status === 'success';
+  });
+
   if (existingPaid) {
     return existingPaid;
   }
@@ -449,8 +553,7 @@ export function recordVerifiedPaystackPayment(params: {
   const paidCount = transactions.filter((t) => t.status === 'success').length;
   const nextReceiptNum = `FINSA-26-${String(101 + paidCount).padStart(5, '0')}`;
   const reference =
-    params.gatewayReference ||
-    `FINSA-TX-26-${Math.floor(100000 + Math.random() * 900000)}`;
+    params.gatewayReference || `FINSA-TX-26-${Math.floor(100000 + Math.random() * 900000)}`;
 
   const amountNaira =
     params.student.roleType === 'executive'
@@ -460,13 +563,16 @@ export function recordVerifiedPaystackPayment(params: {
   const categoryTitle =
     params.student.roleType === 'executive' ? config.executiveTitle : config.regularTitle;
 
+  const identifierForHash = params.student.matricNumber || params.student.regNo;
+
   const newTx: TransactionRecord = {
     id: `tx-${Date.now()}`,
     reference,
     receiptNumber: nextReceiptNum,
-    verificationHash: `CU-FINSA-VERIFIED-${params.student.matricNumber}-${nextReceiptNum.slice(-5)}`,
+    verificationHash: `CU-FINSA-VERIFIED-${identifierForHash}-${nextReceiptNum.slice(-5)}`,
     studentId: params.student.id,
-    matricNumber: params.student.matricNumber,
+    regNo: params.student.regNo,
+    matricNumber: params.student.matricNumber || '',
     studentName: params.student.fullName,
     email: params.student.email,
     level: params.student.level,
@@ -481,16 +587,17 @@ export function recordVerifiedPaystackPayment(params: {
     verifiedBy: 'Paystack Server Verification (HMAC-SHA512)',
   };
 
-  // Also mark any old pending attempts for this student as superseded/failed
+  // Supersede old pending attempts
   const updatedList = [
     newTx,
-    ...transactions.filter(
-      (t) =>
-        !(
-          normalizeMatric(t.matricNumber) === normalizeMatric(params.student.matricNumber) &&
-          t.status === 'pending_verification'
-        )
-    ),
+    ...transactions.filter((t) => {
+      const matchReg = t.regNo && normalizeIdentifier(t.regNo) === normalizeIdentifier(params.student.regNo);
+      const matchMatric =
+        params.student.matricNumber &&
+        t.matricNumber &&
+        normalizeIdentifier(t.matricNumber) === normalizeIdentifier(params.student.matricNumber);
+      return !(matchReg || matchMatric) || t.status === 'success';
+    }),
   ];
 
   if (isBrowser()) {
@@ -498,30 +605,85 @@ export function recordVerifiedPaystackPayment(params: {
     addAuditLog(
       'Paystack Gateway',
       'PAYMENT_VERIFIED',
-      `Verified ${formatNaira(amountNaira)} for ${params.student.matricNumber} (${
+      `Verified ${formatNaira(amountNaira)} for ${params.student.regNo || params.student.matricNumber} (${
         params.student.roleType.toUpperCase()
       }) -> Receipt ${nextReceiptNum}`
     );
   }
 
+  syncTransactionToSupabase(newTx);
   return newTx;
 }
 
+/**
+ * Bank transfer submission with strict duplicate session ID detection and payer relationship attribution
+ */
 export function submitBankTransferClaim(params: {
   student: StudentRecord;
+  senderName: string;
   senderBank: string;
   sessionId: string;
-}): TransactionRecord {
+  payerRelationship?: string;
+  transferDate?: string;
+}): { success: boolean; transaction?: TransactionRecord; error?: string } {
   const transactions = getTransactions();
   const config = getFeeConfig();
 
-  // Check if already paid
-  const existingPaid = transactions.find(
-    (t) =>
-      normalizeMatric(t.matricNumber) === normalizeMatric(params.student.matricNumber) &&
-      t.status === 'success'
+  const cleanSessionId = params.sessionId.trim().toUpperCase();
+  if (!cleanSessionId || cleanSessionId.length < 8) {
+    return {
+      success: false,
+      error: 'Please enter a valid bank transfer Session ID / NIP Reference (at least 8 characters).',
+    };
+  }
+
+  if (!params.senderName.trim()) {
+    return {
+      success: false,
+      error: 'Please enter the exact Sender / Account Name that performed the transfer.',
+    };
+  }
+
+  // 1. Anti-Fraud Duplicate Reference Check
+  const duplicateTx = transactions.find(
+    (t) => t.transferSessionId && normalizeIdentifier(t.transferSessionId) === cleanSessionId
   );
-  if (existingPaid) return existingPaid;
+  if (duplicateTx) {
+    return {
+      success: false,
+      error: `Duplicate Bank Session ID detected. Reference ${params.sessionId} is already recorded under ${duplicateTx.studentName}. Receipt reuse is strictly prohibited.`,
+    };
+  }
+
+  // 2. Active Pending Claim Check for this student
+  const existingPending = transactions.find((t) => {
+    const matchReg = t.regNo && normalizeIdentifier(t.regNo) === normalizeIdentifier(params.student.regNo);
+    const matchMatric =
+      params.student.matricNumber &&
+      t.matricNumber &&
+      normalizeIdentifier(t.matricNumber) === normalizeIdentifier(params.student.matricNumber);
+    return (matchReg || matchMatric) && t.status === 'pending_verification';
+  });
+
+  if (existingPending) {
+    return {
+      success: false,
+      error: 'You already have an active transfer claim pending Treasury verification. Please wait for reconciliation.',
+    };
+  }
+
+  // 3. Already Paid Check
+  const existingPaid = transactions.find((t) => {
+    const matchReg = t.regNo && normalizeIdentifier(t.regNo) === normalizeIdentifier(params.student.regNo);
+    const matchMatric =
+      params.student.matricNumber &&
+      t.matricNumber &&
+      normalizeIdentifier(t.matricNumber) === normalizeIdentifier(params.student.matricNumber);
+    return (matchReg || matchMatric) && t.status === 'success';
+  });
+  if (existingPaid) {
+    return { success: true, transaction: existingPaid };
+  }
 
   const amountNaira =
     params.student.roleType === 'executive'
@@ -535,7 +697,8 @@ export function submitBankTransferClaim(params: {
     id: `tx-${Date.now()}`,
     reference: `FINSA-TRF-26-${Math.floor(100000 + Math.random() * 900000)}`,
     studentId: params.student.id,
-    matricNumber: params.student.matricNumber,
+    regNo: params.student.regNo,
+    matricNumber: params.student.matricNumber || '',
     studentName: params.student.fullName,
     email: params.student.email,
     level: params.student.level,
@@ -545,8 +708,11 @@ export function submitBankTransferClaim(params: {
     amountNaira,
     paymentRail: 'bank_transfer',
     status: 'pending_verification',
+    transferSenderName: params.senderName.trim(),
     transferSenderBank: params.senderBank.trim(),
-    transferSessionId: params.sessionId.trim(),
+    transferSessionId: cleanSessionId,
+    transferPayerRelationship: params.payerRelationship || 'self',
+    transferDate: params.transferDate || new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
 
@@ -554,14 +720,14 @@ export function submitBankTransferClaim(params: {
   if (isBrowser()) {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(next));
     addAuditLog(
-      params.student.matricNumber,
-      'TRANSFER_SUBMITTED',
-      `Submitted bank transfer proof (${params.senderBank} · Ref: ${params.sessionId}) for ${formatNaira(
-        amountNaira
-      )}`
+      params.student.regNo || params.student.matricNumber || 'Student',
+      'TRANSFER_CLAIM_SUBMITTED',
+      `Submitted bank transfer claim: ${params.senderBank} · Session ID: ${cleanSessionId} · Payer: ${params.senderName} (${params.payerRelationship || 'self'})`
     );
   }
-  return newTx;
+
+  syncTransactionToSupabase(newTx);
+  return { success: true, transaction: newTx };
 }
 
 export function approveBankTransfer(txId: string, adminActor = 'Financial Secretary'): TransactionRecord | null {
@@ -574,12 +740,13 @@ export function approveBankTransfer(txId: string, adminActor = 'Financial Secret
 
   const paidCount = transactions.filter((t) => t.status === 'success').length;
   const nextReceiptNum = `FINSA-26-${String(101 + paidCount).padStart(5, '0')}`;
+  const identifierForHash = target.matricNumber || target.regNo || 'STUDENT';
 
   const approved: TransactionRecord = {
     ...target,
     status: 'success',
     receiptNumber: nextReceiptNum,
-    verificationHash: `CU-FINSA-VERIFIED-${target.matricNumber}-${nextReceiptNum.slice(-5)}`,
+    verificationHash: `CU-FINSA-VERIFIED-${identifierForHash}-${nextReceiptNum.slice(-5)}`,
     verifiedAt: new Date().toISOString(),
     verifiedBy: `${adminActor} (Manual Reconciliation)`,
   };
@@ -590,13 +757,15 @@ export function approveBankTransfer(txId: string, adminActor = 'Financial Secret
     addAuditLog(
       adminActor,
       'TRANSFER_APPROVED',
-      `Approved ${formatNaira(approved.amountNaira)} transfer for ${approved.matricNumber} -> Issued ${nextReceiptNum}`
+      `Approved ${formatNaira(approved.amountNaira)} transfer (Session: ${approved.transferSessionId}) for ${approved.studentName} -> Issued ${nextReceiptNum}`
     );
   }
+
+  syncTransactionToSupabase(approved);
   return approved;
 }
 
-export function rejectBankTransfer(txId: string, adminActor = 'Financial Secretary'): TransactionRecord | null {
+export function rejectBankTransfer(txId: string, adminActor = 'Financial Secretary', reason = 'Declined Transfer'): TransactionRecord | null {
   const transactions = getTransactions();
   const idx = transactions.findIndex((t) => t.id === txId);
   if (idx === -1) return null;
@@ -605,7 +774,7 @@ export function rejectBankTransfer(txId: string, adminActor = 'Financial Secreta
     ...transactions[idx],
     status: 'failed',
     verifiedAt: new Date().toISOString(),
-    verifiedBy: `${adminActor} (Declined Transfer)`,
+    verifiedBy: `${adminActor} (${reason})`,
   };
 
   transactions[idx] = rejected;
@@ -614,9 +783,11 @@ export function rejectBankTransfer(txId: string, adminActor = 'Financial Secreta
     addAuditLog(
       adminActor,
       'TRANSFER_DECLINED',
-      `Declined unverified transfer ${rejected.reference} for ${rejected.matricNumber}`
+      `Declined unverified transfer ${rejected.reference} (Session: ${rejected.transferSessionId}): ${reason}`
     );
   }
+
+  syncTransactionToSupabase(rejected);
   return rejected;
 }
 
@@ -640,15 +811,18 @@ export function setActiveSessionStudent(student: StudentRecord | null): void {
   }
 }
 
+/**
+ * Dual-Key Authentication: Accepts either 7-digit Registration Number OR Matriculation Number
+ */
 export function authenticateStudent(
-  matric: string,
+  identifier: string,
   password: string
 ): { success: boolean; student?: StudentRecord; error?: string } {
-  const cleanMatric = normalizeMatric(matric);
-  if (!cleanMatric || cleanMatric.length < 5) {
+  const cleanId = normalizeIdentifier(identifier);
+  if (!cleanId || cleanId.length < 5) {
     return {
       success: false,
-      error: 'Please enter a valid matriculation number (e.g. 22AG031140).',
+      error: 'Please enter a valid Registration Number (e.g. 2601001) or Matriculation Number (e.g. 25AG032080).',
     };
   }
 
@@ -660,7 +834,6 @@ export function authenticateStudent(
     };
   }
 
-  // Permissive default password checking for student portal convenience
   const allowedDefaults = ['finsaonline', 'finsa2026', 'covenant', 'password', '123456'];
   const passLower = cleanPass.toLowerCase();
   if (!allowedDefaults.includes(passLower) && cleanPass.length < 4) {
@@ -671,22 +844,36 @@ export function authenticateStudent(
   }
 
   const students = getStudents();
-  let student = students.find((s: StudentRecord) => normalizeMatric(s.matricNumber) === cleanMatric);
+  let student = students.find((s: StudentRecord) => {
+    const sMatric = normalizeIdentifier(s.matricNumber || '');
+    const sReg = normalizeIdentifier(s.regNo || '');
+    return sMatric === cleanId || sReg === cleanId;
+  });
 
   if (!student) {
-    // Dynamically provision new student record based on matriculation year
+    // Dynamically provision new student record based on cohort intake rules
     let inferredLevel: AcademicLevel = '400L';
-    if (cleanMatric.startsWith('25')) inferredLevel = '100L';
-    else if (cleanMatric.startsWith('24')) inferredLevel = '200L';
-    else if (cleanMatric.startsWith('23')) inferredLevel = '300L';
-    else if (cleanMatric.startsWith('22')) inferredLevel = '400L';
+    let isFreshman = false;
+
+    if (cleanId.startsWith('26')) {
+      inferredLevel = '100L'; // Resumed 2026/2027 (~2 weeks ago), only Reg No
+      isFreshman = true;
+    } else if (cleanId.startsWith('25')) {
+      inferredLevel = '200L'; // Sophomores
+    } else if (cleanId.startsWith('24')) {
+      inferredLevel = '300L'; // Penultimate
+    } else if (cleanId.startsWith('23') || cleanId.startsWith('22')) {
+      inferredLevel = '400L'; // Final Year Class
+    }
 
     student = upsertStudent({
-      matricNumber: cleanMatric,
-      fullName: `Student ${cleanMatric}`,
-      email: `${cleanMatric.toLowerCase()}@stu.cu.edu.ng`,
+      regNo: isFreshman || cleanId.length === 7 ? cleanId : cleanId.slice(0, 7),
+      matricNumber: isFreshman ? '' : cleanId,
+      fullName: `Student ${cleanId}`,
+      email: `${cleanId.toLowerCase()}@stu.cu.edu.ng`,
       level: inferredLevel,
       roleType: 'regular',
+      course: cleanId.endsWith('1') || cleanId.endsWith('3') || cleanId.endsWith('5') ? 'FinTech' : 'Finance',
     });
   }
 
@@ -698,54 +885,54 @@ export function getSampleDemoStudents(): StudentRecord[] {
   return getStudents();
 }
 
-/**
- * Back-office Student CRUD and Manual Clearance overrides
- */
 export function createBackofficeStudent(
   data: {
-    matricNumber: string;
-    regNo?: string;
     fullName: string;
+    matricNumber?: string;
+    regNo: string;
     email: string;
     level: AcademicLevel;
+    course: string;
     roleType: StudentRoleType;
-    course?: string;
     executiveTitle?: string;
   },
   actor = 'Department Admin'
 ): StudentRecord {
-  const matric = normalizeMatric(data.matricNumber);
-  const students = getStudents();
+  const cleanReg = normalizeIdentifier(data.regNo);
+  const cleanMatric = data.matricNumber ? normalizeIdentifier(data.matricNumber) : '';
 
-  const newStudent: StudentRecord = {
-    id: `stu-bo-${Date.now()}`,
-    matricNumber: matric,
-    regNo: data.regNo?.trim() || undefined,
+  const students = getStudents();
+  const created: StudentRecord = {
+    id: `stu-custom-${Date.now()}`,
     fullName: data.fullName.trim(),
+    matricNumber: cleanMatric,
+    regNo: cleanReg,
     email: data.email.trim().toLowerCase(),
     level: data.level,
+    course: data.course || 'Finance',
     roleType: data.roleType,
-    course: data.course?.trim() || 'Finance',
     executiveTitle: data.roleType === 'executive' ? data.executiveTitle?.trim() : undefined,
     isRosterVerified: true,
     createdAt: new Date().toISOString(),
   };
 
-  const updated = [newStudent, ...students];
+  const next = [created, ...students];
   if (isBrowser()) {
-    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(next));
     addAuditLog(
       actor,
       'STUDENT_CREATED',
-      `Enrolled student ${newStudent.fullName} (${newStudent.matricNumber}) into ${newStudent.level} ${newStudent.course}`
+      `Registered new scholar ${created.fullName} (${created.regNo || created.matricNumber}) to official registry`
     );
   }
-  return newStudent;
+
+  syncStudentToSupabase(created);
+  return created;
 }
 
 export function updateBackofficeStudent(
   id: string,
-  partial: Partial<Omit<StudentRecord, 'id' | 'createdAt'>>,
+  partial: Partial<StudentRecord>,
   actor = 'Department Admin'
 ): StudentRecord | null {
   const students = getStudents();
@@ -756,7 +943,8 @@ export function updateBackofficeStudent(
   const updated: StudentRecord = {
     ...current,
     ...partial,
-    matricNumber: partial.matricNumber ? normalizeMatric(partial.matricNumber) : current.matricNumber,
+    matricNumber: partial.matricNumber !== undefined ? (partial.matricNumber ? normalizeIdentifier(partial.matricNumber) : '') : current.matricNumber,
+    regNo: partial.regNo ? normalizeIdentifier(partial.regNo) : current.regNo,
     fullName: partial.fullName ? partial.fullName.trim() : current.fullName,
     email: partial.email ? partial.email.trim().toLowerCase() : current.email,
   };
@@ -767,9 +955,11 @@ export function updateBackofficeStudent(
     addAuditLog(
       actor,
       'STUDENT_UPDATED',
-      `Updated student record ${updated.matricNumber} (${updated.fullName})`
+      `Updated student record ${updated.regNo || updated.matricNumber} (${updated.fullName})`
     );
   }
+
+  syncStudentToSupabase(updated);
   return updated;
 }
 
@@ -784,7 +974,7 @@ export function deleteBackofficeStudent(id: string, actor = 'Department Admin'):
     addAuditLog(
       actor,
       'STUDENT_DELETED',
-      `Archived student ${target.fullName} (${target.matricNumber}) from official registry`
+      `Archived student ${target.fullName} (${target.regNo || target.matricNumber}) from official registry`
     );
   }
   return true;
@@ -807,7 +997,8 @@ export function manualClearStudent(
 
   const paidCount = transactions.filter((t) => t.status === 'success').length;
   const nextReceiptNum = `FINSA-26-${String(101 + paidCount).padStart(5, '0')}`;
-  const verificationHash = `CU-FINSA-VERIFIED-${student.matricNumber}-${nextReceiptNum.slice(-5)}`;
+  const identifierForHash = student.matricNumber || student.regNo;
+  const verificationHash = `CU-FINSA-VERIFIED-${identifierForHash}-${nextReceiptNum.slice(-5)}`;
 
   const manualTx: TransactionRecord = {
     id: `tx-man-${Date.now()}`,
@@ -815,7 +1006,8 @@ export function manualClearStudent(
     receiptNumber: nextReceiptNum,
     verificationHash,
     studentId: student.id,
-    matricNumber: student.matricNumber,
+    regNo: student.regNo,
+    matricNumber: student.matricNumber || '',
     studentName: student.fullName,
     email: student.email,
     level: student.level,
@@ -836,9 +1028,11 @@ export function manualClearStudent(
     addAuditLog(
       actor,
       'MANUAL_CLEARANCE_ISSUED',
-      `Issued direct departmental clearance ${nextReceiptNum} for ${student.fullName} (${student.matricNumber})`
+      `Issued direct departmental clearance ${nextReceiptNum} for ${student.fullName} (${student.regNo || student.matricNumber})`
     );
   }
+
+  syncTransactionToSupabase(manualTx);
   return manualTx;
 }
 
@@ -853,5 +1047,3 @@ export function resetStudentsToRosterSeed(actor = 'Department Admin'): StudentRe
   }
   return OFFICIAL_ROSTER_SEED;
 }
-
-

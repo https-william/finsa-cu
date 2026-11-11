@@ -136,20 +136,25 @@ export default function AdminDashboardPage() {
     setTimeout(() => setActionFeedback(null), 4000);
   };
 
-  // Student Clearance Lookup Mapping
+  // Student Clearance Lookup Mapping with Dual-Key Support
   const clearanceStatusMap = useMemo(() => {
     const map = new Map<string, { status: 'cleared' | 'pending' | 'unpaid'; transaction?: TransactionRecord }>();
     const paidTxs = transactions.filter((t) => t.status === 'success');
     const pendingTxs = transactions.filter((t) => t.status === 'pending_verification');
 
     paidTxs.forEach((t) => {
-      map.set(normalizeMatric(t.matricNumber), { status: 'cleared', transaction: t });
+      if (t.matricNumber) map.set(normalizeMatric(t.matricNumber), { status: 'cleared', transaction: t });
+      if (t.regNo) map.set(normalizeMatric(t.regNo), { status: 'cleared', transaction: t });
+      if (t.studentId) map.set(t.studentId, { status: 'cleared', transaction: t });
     });
 
     pendingTxs.forEach((t) => {
-      if (!map.has(normalizeMatric(t.matricNumber))) {
-        map.set(normalizeMatric(t.matricNumber), { status: 'pending', transaction: t });
-      }
+      const keys = [t.matricNumber, t.regNo, t.studentId].filter(Boolean).map((k) => normalizeMatric(k!));
+      keys.forEach((k) => {
+        if (!map.has(k)) {
+          map.set(k, { status: 'pending', transaction: t });
+        }
+      });
     });
 
     return map;
@@ -162,7 +167,7 @@ export default function AdminDashboardPage() {
       const matchesSearch =
         !q ||
         s.fullName.toLowerCase().includes(q) ||
-        s.matricNumber.toLowerCase().includes(q) ||
+        (s.matricNumber && s.matricNumber.toLowerCase().includes(q)) ||
         (s.regNo && s.regNo.toLowerCase().includes(q)) ||
         s.email.toLowerCase().includes(q) ||
         (s.course && s.course.toLowerCase().includes(q));
@@ -172,7 +177,14 @@ export default function AdminDashboardPage() {
         rosterCourseFilter === 'ALL' ||
         (s.course && s.course.toLowerCase() === rosterCourseFilter.toLowerCase());
 
-      const clearance = clearanceStatusMap.get(normalizeMatric(s.matricNumber))?.status || 'unpaid';
+      const sMatric = s.matricNumber ? normalizeMatric(s.matricNumber) : '';
+      const sReg = s.regNo ? normalizeMatric(s.regNo) : '';
+      const clearance =
+        (sMatric && clearanceStatusMap.get(sMatric)?.status) ||
+        (sReg && clearanceStatusMap.get(sReg)?.status) ||
+        clearanceStatusMap.get(s.id)?.status ||
+        'unpaid';
+
       const matchesStatus =
         rosterStatusFilter === 'ALL' ||
         (rosterStatusFilter === 'CLEARED' && clearance === 'cleared') ||
@@ -190,7 +202,8 @@ export default function AdminDashboardPage() {
       const matchesSearch =
         !q ||
         t.studentName.toLowerCase().includes(q) ||
-        t.matricNumber.toLowerCase().includes(q) ||
+        (t.matricNumber && t.matricNumber.toLowerCase().includes(q)) ||
+        (t.regNo && t.regNo.toLowerCase().includes(q)) ||
         t.reference.toLowerCase().includes(q) ||
         (t.receiptNumber && t.receiptNumber.toLowerCase().includes(q));
 
@@ -210,7 +223,12 @@ export default function AdminDashboardPage() {
     let fintechCount = 0;
 
     students.forEach((s) => {
-      const c = clearanceStatusMap.get(normalizeMatric(s.matricNumber))?.status;
+      const sMatric = s.matricNumber ? normalizeMatric(s.matricNumber) : '';
+      const sReg = s.regNo ? normalizeMatric(s.regNo) : '';
+      const c =
+        (sMatric && clearanceStatusMap.get(sMatric)?.status) ||
+        (sReg && clearanceStatusMap.get(sReg)?.status) ||
+        clearanceStatusMap.get(s.id)?.status;
       if (c === 'cleared') clearedCount += 1;
       else if (c === 'pending') pendingCount += 1;
 
@@ -244,16 +262,24 @@ export default function AdminDashboardPage() {
       setFormError('Please enter the full legal name of the student.');
       return;
     }
-    if (newStudentMatric.trim().length < 5) {
-      setFormError('Please enter a valid matriculation number (e.g. 25AG032080).');
-      return;
+    if (newStudentLevel === '100L') {
+      if (!newStudentRegNo.trim() || newStudentRegNo.trim().length < 6) {
+        setFormError('Please enter the 7-digit Registration Number for this 100L Freshman (e.g. 2601001).');
+        return;
+      }
+    } else {
+      if (!newStudentMatric.trim() && !newStudentRegNo.trim()) {
+        setFormError('Please enter a Matriculation Number or Registration Number.');
+        return;
+      }
     }
-    const emailToUse = newStudentEmail.trim() || `${normalizeMatric(newStudentMatric).toLowerCase()}@stu.cu.edu.ng`;
+    const identifier = newStudentRegNo.trim() || newStudentMatric.trim();
+    const emailToUse = newStudentEmail.trim() || `${identifier.toLowerCase()}@stu.cu.edu.ng`;
 
     createBackofficeStudent({
       fullName: newStudentName,
-      matricNumber: newStudentMatric,
-      regNo: newStudentRegNo || undefined,
+      matricNumber: newStudentMatric.trim() || undefined,
+      regNo: newStudentRegNo.trim() || newStudentMatric.trim(),
       email: emailToUse,
       level: newStudentLevel,
       course: newStudentCourse,
@@ -379,10 +405,16 @@ export default function AdminDashboardPage() {
     ];
 
     const rows = filteredStudents.map((s) => {
-      const cl = clearanceStatusMap.get(normalizeMatric(s.matricNumber));
+      const sMatric = s.matricNumber ? normalizeMatric(s.matricNumber) : '';
+      const sReg = s.regNo ? normalizeMatric(s.regNo) : '';
+      const cl =
+        (sMatric && clearanceStatusMap.get(sMatric)) ||
+        (sReg && clearanceStatusMap.get(sReg)) ||
+        clearanceStatusMap.get(s.id);
+
       return [
         s.fullName,
-        s.matricNumber,
+        s.matricNumber || 'N/A',
         s.regNo || 'N/A',
         s.level,
         s.course || 'Finance',
@@ -394,7 +426,7 @@ export default function AdminDashboardPage() {
       ];
     });
 
-    const escapeCsv = (val: string) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const escapeCsv = (val?: string) => `"${String(val ?? '').replace(/"/g, '""')}"`;
     const csvContent = [headers.map(escapeCsv).join(','), ...rows.map((r) => r.map(escapeCsv).join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -769,7 +801,12 @@ export default function AdminDashboardPage() {
                       </tr>
                     ) : (
                       filteredStudents.map((s) => {
-                        const cl = clearanceStatusMap.get(normalizeMatric(s.matricNumber));
+                        const sMatric = s.matricNumber ? normalizeMatric(s.matricNumber) : '';
+                        const sReg = s.regNo ? normalizeMatric(s.regNo) : '';
+                        const cl =
+                          (sMatric && clearanceStatusMap.get(sMatric)) ||
+                          (sReg && clearanceStatusMap.get(sReg)) ||
+                          clearanceStatusMap.get(s.id);
                         const isCleared = cl?.status === 'cleared';
                         const isPending = cl?.status === 'pending';
 
@@ -785,13 +822,26 @@ export default function AdminDashboardPage() {
 
                             {/* Matric & Reg No */}
                             <td className="py-3 px-4 font-mono">
-                              <span className="font-semibold text-zinc-900 block">
-                                {s.matricNumber}
-                              </span>
-                              {s.regNo && (
-                                <span className="text-[10px] text-zinc-400 block">
-                                  Reg: {s.regNo}
-                                </span>
+                              {s.matricNumber ? (
+                                <>
+                                  <span className="font-semibold text-zinc-900 block">
+                                    {s.matricNumber}
+                                  </span>
+                                  {s.regNo && (
+                                    <span className="text-[10px] text-zinc-400 block">
+                                      Reg: {s.regNo}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="font-semibold text-blue-700 block">
+                                    Reg: {s.regNo}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 block font-sans">
+                                    100L Freshman
+                                  </span>
+                                </>
                               )}
                             </td>
 
@@ -1000,7 +1050,9 @@ export default function AdminDashboardPage() {
 
                             <td className="py-3 px-4">
                               <span className="font-semibold text-zinc-900 block">{t.studentName}</span>
-                              <span className="text-[11px] font-mono text-zinc-500">{t.matricNumber}</span>
+                              <span className="text-[11px] font-mono text-zinc-500">
+                                {t.matricNumber || `Reg: ${t.regNo}`}
+                              </span>
                             </td>
 
                             <td className="py-3 px-4">
@@ -1021,17 +1073,25 @@ export default function AdminDashboardPage() {
                               {isVerified ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
                                   <CheckCircle size={12} weight="fill" className="text-emerald-600" />
-                                  <span>Verified</span>
+                                  <span>Verified &amp; Reconciled</span>
                                 </span>
                               ) : isPendingClaim ? (
-                                <div className="space-y-0.5">
+                                <div className="space-y-1">
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-amber-50 text-amber-800 border border-amber-200">
                                     <Clock size={12} className="text-amber-600" />
-                                    <span>Transfer Claim</span>
+                                    <span>Transfer Review</span>
                                   </span>
-                                  <span className="text-[10px] text-zinc-500 block font-mono">
-                                    {t.transferSenderBank} · {t.transferSessionId}
-                                  </span>
+                                  <div className="text-[10px] text-zinc-600 space-y-0.5">
+                                    <span className="block font-medium text-zinc-900">
+                                      Payer: {t.transferSenderName || 'Unspecified'}
+                                      {t.transferPayerRelationship && (
+                                        <span className="ml-1 text-zinc-400">({t.transferPayerRelationship})</span>
+                                      )}
+                                    </span>
+                                    <span className="block font-mono text-zinc-500">
+                                      {t.transferSenderBank} · Ref: {t.transferSessionId}
+                                    </span>
+                                  </div>
                                 </div>
                               ) : (
                                 <span className="text-zinc-400 font-mono text-[11px]">{t.status}</span>

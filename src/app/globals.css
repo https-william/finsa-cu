@@ -20,11 +20,49 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth momentum scrolling for older iOS WebKit */
+  * {
+    -webkit-overflow-scrolling: touch;
   }
 }
 
 .font-tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Wall Street Market Ticker Animation */
+@keyframes ticker {
+  0% {
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+    -webkit-transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-ticker {
+  display: inline-flex;
+  animation: ticker 45s linear infinite;
+  -webkit-animation: ticker 45s linear infinite;
+}
+
+.animate-ticker:hover {
+  animation-play-state: paused;
+  -webkit-animation-play-state: paused;
+}
+
+/* iOS 12 & iPod Touch 6th Gen Graceful Blur Fallbacks */
+@supports not (backdrop-filter: blur(10px)) {
+  .backdrop-blur-md,
+  .backdrop-blur-sm,
+  .backdrop-blur-xs {
+    background-color: #FFFFFF !important;
+  }
 }
 
 /* Print-Specific Clearance Certificate */
